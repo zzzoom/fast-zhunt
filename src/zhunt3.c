@@ -305,7 +305,7 @@ FILE *open_file( int mode, char *filename, char *typestr )
 
   FILE *file;
   file = NULL;
-  fullfile = (char *) malloc(sizeof(char) * ( strlen(filename) + strlen(typestr) + 1) );
+  fullfile = (char *) malloc(sizeof(char) * ( strlen(filename) + strlen(typestr) + 2) );
   strcpy(fullfile, filename);
   if(strlen(typestr) != 0)
 	{
