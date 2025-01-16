@@ -22,7 +22,7 @@ The EMBO Journal, Vol.5, No.10, pp2737-2744, 1986
 With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 */
 
-
+#include <error.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -148,8 +148,8 @@ static int    *bzindex;                        /* dinucleotides */
 
 
 
-static void best_anti_syn(char* antisyn, double* bzenergy, int dinucleotides, float esum);
-static void anti_syn_energy(char* antisyn, double* bzenergy, int din, int dinucleotides, float esum);
+static void best_anti_syn(char* antisyn, int dinucleotides, float esum);
+static void anti_syn_energy(char* antisyn, int din, int dinucleotides, float esum);
 
 int      user_regret( void );
 FILE     *open_file( int mode, char *filename, char *typestr );
@@ -213,19 +213,28 @@ float  best_esum;               /* assigned before call to anti_syn_energy() */
 char   *best_antisyn;         /* nucleotides */
 
 
-static void best_anti_syn(char* antisyn, double* bzenergy, int dinucleotides, float esum)
+static void best_anti_syn(char* antisyn, int dinucleotides, float esum)
 {
   if (esum < best_esum) {
     best_esum = esum;
-    for (int i=0; i<dinucleotides; i++) {
-      best_bzenergy[i] = bzenergy[i];
+
+    for (int din = 0; din < dinucleotides; ++din) {
+      int i;
+      if (antisyn[2*din] == 'A') {
+        i = (din == 0) ? 0 : ((antisyn[2*din-1] == 'S') ? 0 : 3);
+      } else if (antisyn[2*din] == 'S') {
+        i = (din == 0) ? 1 : ((antisyn[2*din-1] == 'A') ? 1 : 2);
+      } else {
+        error(1, 1, "best_anti_syn: shouldn't be here");
+      }
+      best_bzenergy[din] = expdbzed[i][bzindex[din]];
     }
     strcpy(best_antisyn, antisyn);
   }
 }
 
 
-static void anti_syn_energy(char* antisyn, double* bzenergy, int din, int dinucleotides, float esum)
+static void anti_syn_energy(char* antisyn, int din, int dinucleotides, float esum)
 {
   int nucleotides = 2 * din;
 
@@ -234,13 +243,12 @@ static void anti_syn_energy(char* antisyn, double* bzenergy, int din, int dinucl
   int i = (din == 0) ? 0 : ((antisyn[nucleotides-1] == 'S') ? 0 : 3);
   float e = dbzed[i][bzindex[din]];
   esum += e;
-  bzenergy[din] = expdbzed[i][bzindex[din]];
 
   ++din;
   if(din == dinucleotides) {
-    best_anti_syn(antisyn, bzenergy, dinucleotides, esum);
+    best_anti_syn(antisyn, dinucleotides, esum);
   } else {
-    anti_syn_energy(antisyn, bzenergy, din, dinucleotides, esum);
+    anti_syn_energy(antisyn, din, dinucleotides, esum);
   }
   esum -= e;
   din--;
@@ -249,12 +257,11 @@ static void anti_syn_energy(char* antisyn, double* bzenergy, int din, int dinucl
   antisyn[nucleotides+1] = 'A';
   i = (din == 0) ? 1 : ((antisyn[nucleotides-1] == 'A') ? 1 : 2);
   esum += dbzed[i][bzindex[din]];
-  bzenergy[din] = expdbzed[i][bzindex[din]];
   ++din;
   if (din == dinucleotides) {
-    best_anti_syn(antisyn, bzenergy, dinucleotides, esum);
+    best_anti_syn(antisyn, dinucleotides, esum);
   } else {
-    anti_syn_energy(antisyn, bzenergy, din, dinucleotides, esum);
+    anti_syn_energy(antisyn, din, dinucleotides, esum);
   }
 }
 
@@ -606,7 +613,7 @@ void calculate_zscore( double a, int maxdinucleotides, int min, int max, char *f
           best_esum = initesum;
           deltatwist = a * (double)din;
           antisyn[2*din] = 0;
-          anti_syn_energy(antisyn, bzenergy, 0, din, 0.0 );           /* esum = 0.0 */
+          anti_syn_energy(antisyn, 0, din, 0.0 );           /* esum = 0.0 */
           dl = find_delta_linking( din );
           if( dl < bestdl )
             {
@@ -813,7 +820,7 @@ void run_distribution( double a, int maxdinucleotides, FILE *disfile )
       generate_random_sequence( dinucleotides, sequence );
       assign_bzenergy_index( nucleotides, sequence );
       best_esum = initesum;
-      anti_syn_energy(antisyn, bzenergy, 0, dinucleotides, 0.0 );
+      anti_syn_energy(antisyn, 0, dinucleotides, 0.0 );
       dl = find_delta_linking( dinucleotides );
       sumdl += dl;
       sumdldl += dl * dl;
