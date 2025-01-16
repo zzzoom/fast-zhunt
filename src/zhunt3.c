@@ -38,100 +38,92 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 #include <fcntl.h>
 #endif
 
-
-double linear_search( double x1, double x2, double tole, double (*func)() );
-double delta_linking( double dl );
-double delta_linking_slope( double dl );
+// forward declarations
+static double linear_search(double x1, double x2, double tole, double (*func)() );
+static double delta_linking(double dl);
+static double delta_linking_slope(double dl);
 void   show_probability( unsigned seqlength, float *dl, float *slope, float *probability, char *sequence, char **antisyn, char *filename );
 void   analyze_zscore( char *filename );
 
-double linear_search( double x1, double x2, double tole, double (*func)() )
-{
-  double f, fmid, dx, xmid, x;
 
-  f = func( x1 );
-  fmid = func( x2 );
-  if( f * fmid >= 0.0 )
+static double linear_search( double x1, double x2, double tole, double (*func)() )
+{
+  double f = func(x1);
+  double fmid = func(x2);
+  if (f * fmid >= 0.0 ) {
     return x2;
-  x = (f < 0.0) ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
-  do
-    {
-      dx *= 0.5;
-      xmid = x + dx;
-      fmid = func( xmid );
-      if( fmid <= 0.0 )
-        x = xmid;
-    }  while( fabs( dx ) > tole );
+  }
+
+  double dx, xmid;
+  double x = (f < 0.0) ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
+  do {
+    dx *= 0.5;
+    xmid = x + dx;
+    fmid = func( xmid );
+    if( fmid <= 0.0 ) {
+      x = xmid;
+    }
+  } while(fabs(dx) > tole);
   return x;
 }
 
+static int    terms;
+static double deltatwist;
+
+static const double _k_rt = -0.2521201;              /* -1100/4363 */
+static const double sigma = 16.94800353;             /* 10/RT */
+static const double explimit = -600.0;
+
+static double *bztwist, *logcoef, *exponent;
 
 
-
-
-int    terms;
-double *bztwist, *logcoef, *exponent;
-double _k_rt = -0.2521201;              /* -1100/4363 */
-double sigma = 16.94800353;             /* 10/RT */
-double deltatwist;
-double explimit = -600.0;
-
-
-double delta_linking( double dl )
+static double delta_linking(double dl)
 {
-  double sump, sumq, z, expmini;
-  int    i;
-
-  expmini = 0.0;
-  for( i=0; i<terms; i++ )
-    {
-      z = dl - bztwist[i];
-      exponent[i] = z = logcoef[i] + _k_rt * z * z;
-      if( z < expmini )
-        expmini = z;
+  double expmini = 0.0;
+  for (int i=0; i<terms; i++) {
+    double z = dl - bztwist[i];
+    exponent[i] = z = logcoef[i] + _k_rt * z * z;
+    if( z < expmini ) {
+      expmini = z;
     }
+  }
   expmini = (expmini < explimit) ? explimit - expmini : 0.0;
-  sump = sumq = 0.0;
-  for( i=0; i<terms; i++ )
-    {
-      z = exp( exponent[i] + expmini );
-      sumq += z;
-      sump += bztwist[i] * z;
-    }
-  sumq += exp( _k_rt * dl * dl + sigma + expmini );
+  double sump = 0.0;
+  double sumq = 0.0;
+  for (int i=0; i<terms; i++) {
+    double z = exp(exponent[i] + expmini);
+    sumq += z;
+    sump += bztwist[i] * z;
+  }
+  sumq += exp(_k_rt * dl * dl + sigma + expmini);
   return deltatwist - sump / sumq;
 }
 
 
-
-
-
-double delta_linking_slope( double dl )
+static double delta_linking_slope(double dl)
 {
-  double sump, sump1, sumq, sumq1, x, y, z, expmini;
-  int    i;
+  double sump, sump1, sumq, sumq1, x, y, z;
 
-  expmini = 0.0;
-  for( i=0; i<terms; i++ )
-    {
-      z = dl - bztwist[i];
-      exponent[i] = z = logcoef[i] + _k_rt * z * z;
-      if( z < expmini )
-        expmini = z;
+  double expmini = 0.0;
+  for (int i=0; i<terms; i++) {
+    z = dl - bztwist[i];
+    exponent[i] = z = logcoef[i] + _k_rt * z * z;
+    if (z < expmini) {
+      expmini = z;
     }
+  }
   expmini = (expmini < explimit) ? explimit - expmini : 0.0;
   sump = sump1 = sumq = sumq1 = 0.0;
   x = 2.0 * _k_rt;
-  for( i=0; i<terms; i++ )
-    {
-      z = dl - bztwist[i];
-      y = exp( exponent[i] + expmini );
-      sumq += y;
-      sump += bztwist[i] * y;
-      y *= z * x;
-      sumq1 += y;
-      sump1 += bztwist[i] * y;
-    }
+  for (int i=0; i<terms; i++) {
+    z = dl - bztwist[i];
+    y = exp( exponent[i] + expmini );
+    sumq += y;
+    sump += bztwist[i] * y;
+    y *= z * x;
+    sumq1 += y;
+    sump1 += bztwist[i] * y;
+  }
   y = exp( _k_rt * dl * dl + sigma + expmini );
   sumq += y;
   sumq1 += x * dl * y;
@@ -139,23 +131,20 @@ double delta_linking_slope( double dl )
 }                                       /* slope at delta linking = dl */
 
 
-
-
-
                                         /* Delta BZ Energy of Dinucleotide */
-double dbzed[4][16] = {
-/* AS-AS */
-{ 4.40, 6.20, 3.40, 5.20, 2.50, 4.40, 1.40, 3.30, 3.30, 5.20, 2.40, 4.20, 1.40, 3.40, 0.66, 2.40 },
-/* SA-SA */
-{ 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 },
-/* AS-SA */
-{ 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
-/* SA-AS */
-{ 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 }
-                      };
+static const double dbzed[4][16] = {
+  /* AS-AS */
+  { 4.40, 6.20, 3.40, 5.20, 2.50, 4.40, 1.40, 3.30, 3.30, 5.20, 2.40, 4.20, 1.40, 3.40, 0.66, 2.40 },
+  /* SA-SA */
+  { 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 },
+  /* AS-SA */
+  { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
+  /* SA-AS */
+  { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 }
+};
 
-double expdbzed[4][16];                 /* exp(-dbzed/rt) */
-int    *bzindex;                        /* dinucleotides */
+static double expdbzed[4][16];                 /* exp(-dbzed/rt) */
+static int    *bzindex;                        /* dinucleotides */
 
 
 
