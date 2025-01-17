@@ -148,8 +148,8 @@ static int    *bzindex;                        /* dinucleotides */
 
 
 
-static void best_anti_syn(char* antisyn, int dinucleotides, float esum);
-static void anti_syn_energy(char* antisyn, int din, int dinucleotides, float esum);
+static void best_anti_syn(char* antisyn, int dinucleotides, double esum);
+static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum);
 
 int      user_regret( void );
 FILE     *open_file( int mode, char *filename, char *typestr );
@@ -209,11 +209,11 @@ void assign_bzenergy_index( int nucleotides, char seq[] )
 
 
 double *bzenergy, *best_bzenergy;       /* dinucleotides */
-float  best_esum;               /* assigned before call to anti_syn_energy() */
+double  best_esum;               /* assigned before call to anti_syn_energy() */
 char   *best_antisyn;         /* nucleotides */
 
 
-static void best_anti_syn(char* antisyn, int dinucleotides, float esum)
+static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
 {
   if (esum < best_esum) {
     best_esum = esum;
@@ -234,34 +234,30 @@ static void best_anti_syn(char* antisyn, int dinucleotides, float esum)
 }
 
 
-static void anti_syn_energy(char* antisyn, int din, int dinucleotides, float esum)
+static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum)
 {
   int nucleotides = 2 * din;
 
   antisyn[nucleotides] = 'A';
   antisyn[nucleotides+1] = 'S';
-  int i = (din == 0) ? 0 : ((antisyn[nucleotides-1] == 'S') ? 0 : 3);
-  float e = dbzed[i][bzindex[din]];
-  esum += e;
+  int i1 = (din == 0) ? 0 : ((antisyn[nucleotides-1] == 'S') ? 0 : 3);
+  double e1 = dbzed[i1][bzindex[din]];
 
-  ++din;
-  if(din == dinucleotides) {
-    best_anti_syn(antisyn, dinucleotides, esum);
+  if (din+1 == dinucleotides) {
+    best_anti_syn(antisyn, dinucleotides, esum + e1);
   } else {
-    anti_syn_energy(antisyn, din, dinucleotides, esum);
+    anti_syn_energy(antisyn, din+1, dinucleotides, esum + e1);
   }
-  esum -= e;
-  din--;
 
   antisyn[nucleotides] = 'S';
   antisyn[nucleotides+1] = 'A';
-  i = (din == 0) ? 1 : ((antisyn[nucleotides-1] == 'A') ? 1 : 2);
-  esum += dbzed[i][bzindex[din]];
-  ++din;
-  if (din == dinucleotides) {
-    best_anti_syn(antisyn, dinucleotides, esum);
+  int i2 = (din == 0) ? 1 : ((antisyn[nucleotides-1] == 'A') ? 1 : 2);
+  double e2 = dbzed[i2][bzindex[din]];
+
+  if (din+1 == dinucleotides) {
+    best_anti_syn(antisyn, dinucleotides, esum + e2);
   } else {
-    anti_syn_energy(antisyn, din, dinucleotides, esum);
+    anti_syn_energy(antisyn, din+1, dinucleotides, esum + e2);
   }
 }
 
@@ -783,7 +779,7 @@ void run_distribution( double a, int maxdinucleotides, FILE *disfile )
 {
   int    i, nucleotides, dinucleotides, levels;
   long   begintime, endtime, repeat, k, *distribution;
-  float  initesum;
+  double  initesum;
   double dl, sumdl, sumdldl, dlaverage, dlstdv, dlfrom, dlto, dlstep;
 
   printf( "\n Window size (dinucleotides) and sample size: " );
