@@ -213,22 +213,37 @@ double  best_esum;               /* assigned before call to anti_syn_energy() */
 char   *best_antisyn;         /* nucleotides */
 
 
+/*
+dbzed:
+AS-AS SA-SA AS-SA SA-AS
+*/
+
+static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy)
+{
+  if (dinucleotides == 0) {
+    return;
+  }
+
+  int i = antisyn[0] == 'A' ? 0 : 1;
+  bzenergy[0] = expdbzed[i][bzindex[0]];
+  for (int din = 1; din < dinucleotides; ++din) {
+    if (antisyn[2*din] == 'A') {
+      i = (antisyn[2*din-1] == 'S') ? 0 : 3;
+    } else if (antisyn[2*din] == 'S') {
+      i = (antisyn[2*din-1] == 'A') ? 1 : 2;
+    } else {
+      error(1, 1, "best_anti_syn: shouldn't be here");
+    }
+    bzenergy[din] = expdbzed[i][bzindex[din]];
+  }
+}
+
+
 static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
 {
   if (esum < best_esum) {
     best_esum = esum;
-
-    for (int din = 0; din < dinucleotides; ++din) {
-      int i;
-      if (antisyn[2*din] == 'A') {
-        i = (din == 0) ? 0 : ((antisyn[2*din-1] == 'S') ? 0 : 3);
-      } else if (antisyn[2*din] == 'S') {
-        i = (din == 0) ? 1 : ((antisyn[2*din-1] == 'A') ? 1 : 2);
-      } else {
-        error(1, 1, "best_anti_syn: shouldn't be here");
-      }
-      best_bzenergy[din] = expdbzed[i][bzindex[din]];
-    }
+    calculate_bzenergy(antisyn, dinucleotides, best_bzenergy);
     strcpy(best_antisyn, antisyn);
   }
 }
