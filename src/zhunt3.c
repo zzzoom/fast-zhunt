@@ -224,13 +224,13 @@ static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* b
     return;
   }
 
-  int i = antisyn[0] == 'A' ? 0 : 1;
+  int i = antisyn[0] == 0 ? 0 : 1;
   bzenergy[0] = expdbzed[i][bzindex[0]];
   for (int din = 1; din < dinucleotides; ++din) {
-    if (antisyn[2*din] == 'A') {
-      i = (antisyn[2*din-1] == 'S') ? 0 : 3;
-    } else if (antisyn[2*din] == 'S') {
-      i = (antisyn[2*din-1] == 'A') ? 1 : 2;
+    if (antisyn[din] == 0) {
+      i = (antisyn[din-1] == 0) ? 0 : 3;
+    } else if (antisyn[din] == 1) {
+      i = (antisyn[din-1] == 1) ? 1 : 2;
     } else {
       error(1, 1, "best_anti_syn: shouldn't be here");
     }
@@ -239,23 +239,39 @@ static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* b
 }
 
 
+static void antisyn_string(const char* antisyn, int dinucleotides, char* dest) {
+  for (int din = 0; din < dinucleotides; ++din) {
+    if (antisyn[din] == 0) {
+      best_antisyn[2*din] = 'A';
+      best_antisyn[2*din+1] = 'S';
+    } else {
+      best_antisyn[2*din] = 'S';
+      best_antisyn[2*din+1] = 'A';
+    }
+  }
+  best_antisyn[2*dinucleotides] = '\0';
+}
+
+
 static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
 {
   if (esum < best_esum) {
     best_esum = esum;
     calculate_bzenergy(antisyn, dinucleotides, best_bzenergy);
-    strcpy(best_antisyn, antisyn);
+    antisyn_string(antisyn, dinucleotides, best_antisyn);
   }
 }
 
 
 static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum)
 {
-  int nucleotides = 2 * din;
-
-  antisyn[nucleotides] = 'A';
-  antisyn[nucleotides+1] = 'S';
-  int i1 = (din == 0) ? 0 : ((antisyn[nucleotides-1] == 'S') ? 0 : 3);
+  antisyn[din] = 0;
+  int i1 = (din == 0) ? 0 : ((antisyn[din-1] == 0) ? 0 : 3);
+  /*
+  if (din > 0) {
+    printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i1);
+  }
+  */
   double e1 = dbzed[i1][bzindex[din]];
 
   if (din+1 == dinucleotides) {
@@ -264,9 +280,13 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
     anti_syn_energy(antisyn, din+1, dinucleotides, esum + e1);
   }
 
-  antisyn[nucleotides] = 'S';
-  antisyn[nucleotides+1] = 'A';
-  int i2 = (din == 0) ? 1 : ((antisyn[nucleotides-1] == 'A') ? 1 : 2);
+  antisyn[din] = 1;
+  int i2 = (din == 0) ? 1 : ((antisyn[din-1] == 1) ? 1 : 2);
+  /*
+  if (din > 0) {
+    printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i2);
+  }
+  */
   double e2 = dbzed[i2][bzindex[din]];
 
   if (din+1 == dinucleotides) {
@@ -275,8 +295,6 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
     anti_syn_energy(antisyn, din+1, dinucleotides, esum + e2);
   }
 }
-
-
 
 
 
