@@ -132,7 +132,7 @@ static double delta_linking_slope(double dl)
 
 
                                         /* Delta BZ Energy of Dinucleotide */
-static const double dbzed[4][16] = {
+static const double dbzed_old[4][16] = {
   /* AS-AS */
   { 4.40, 6.20, 3.40, 5.20, 2.50, 4.40, 1.40, 3.30, 3.30, 5.20, 2.40, 4.20, 1.40, 3.40, 0.66, 2.40 },
   /* SA-SA */
@@ -143,6 +143,16 @@ static const double dbzed[4][16] = {
   { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 }
 };
 
+static const double dbzed[4][16] = {
+  /* AS-AS */
+  { 4.40, 6.20, 3.40, 5.20, 2.50, 4.40, 1.40, 3.30, 3.30, 5.20, 2.40, 4.20, 1.40, 3.40, 0.66, 2.40 },
+  /* AS-SA */
+  { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
+  /* SA-AS */
+  { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
+  /* SA-SA */
+  { 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 }
+};
 static double expdbzed[4][16];                 /* exp(-dbzed/rt) */
 static int    *bzindex;                        /* dinucleotides */
 
@@ -224,13 +234,13 @@ static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* b
     return;
   }
 
-  int i = antisyn[0] == 0 ? 0 : 1;
+  int i = antisyn[0] == 0 ? 0 : 3;
   bzenergy[0] = expdbzed[i][bzindex[0]];
   for (int din = 1; din < dinucleotides; ++din) {
     if (antisyn[din] == 0) {
-      i = (antisyn[din-1] == 0) ? 0 : 3;
+      i = (antisyn[din-1] == 0) ? 0 : 2;
     } else if (antisyn[din] == 1) {
-      i = (antisyn[din-1] == 1) ? 1 : 2;
+      i = (antisyn[din-1] == 1) ? 3 : 1;
     } else {
       error(1, 1, "best_anti_syn: shouldn't be here");
     }
@@ -266,7 +276,7 @@ static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
 static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum)
 {
   antisyn[din] = 0;
-  int i1 = (din == 0) ? 0 : ((antisyn[din-1] == 0) ? 0 : 3);
+  int i1 = (din == 0) ? 0 : ((antisyn[din-1] == 0) ? 0 : 2);
   /*
   if (din > 0) {
     printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i1);
@@ -281,7 +291,7 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
   }
 
   antisyn[din] = 1;
-  int i2 = (din == 0) ? 1 : ((antisyn[din-1] == 1) ? 1 : 2);
+  int i2 = (din == 0) ? 3 : ((antisyn[din-1] == 1) ? 3 : 1);
   /*
   if (din > 0) {
     printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i2);
