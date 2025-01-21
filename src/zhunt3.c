@@ -23,200 +23,221 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 */
 
 #include <error.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 /* creates a temporary file and mmaps the sequence into it */
 #ifdef USE_MMAP
-#include <sys/types.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #endif
 
-
-static int    terms;
+static int terms;
 static double deltatwist;
 
-static const double _k_rt = -0.2521201;              /* -1100/4363 */
-static const double sigma = 16.94800353;             /* 10/RT */
+static const double _k_rt = -0.2521201; /* -1100/4363 */
+static const double sigma = 16.94800353; /* 10/RT */
 static const double explimit = -600.0;
 
 static double *bztwist, *logcoef, *exponent;
 
 /* Delta BZ Energy of Dinucleotide */
 static const double dbzed[4][16] = {
-  /* AS-AS */
-  { 4.40, 6.20, 3.40, 5.20, 2.50, 4.40, 1.40, 3.30, 3.30, 5.20, 2.40, 4.20, 1.40, 3.40, 0.66, 2.40 },
-  /* AS-SA */
-  { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
-  /* SA-AS */
-  { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
-  /* SA-SA */
-  { 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 }
+    /* AS-AS */
+    { 4.40, 6.20, 3.40, 5.20, 2.50, 4.40, 1.40, 3.30, 3.30, 5.20, 2.40, 4.20, 1.40, 3.40, 0.66, 2.40 },
+    /* AS-SA */
+    { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
+    /* SA-AS */
+    { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
+    /* SA-SA */
+    { 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 }
 };
-static double expdbzed[4][16];                 /* exp(-dbzed/rt) */
-static int    *bzindex;                        /* dinucleotides */
+static double expdbzed[4][16]; /* exp(-dbzed/rt) */
+static int* bzindex; /* dinucleotides */
 
-double *bzenergy, *best_bzenergy;       /* dinucleotides */
-double  best_esum;               /* assigned before call to anti_syn_energy() */
-char   *best_antisyn;         /* nucleotides */
+double *bzenergy, *best_bzenergy; /* dinucleotides */
+double best_esum; /* assigned before call to anti_syn_energy() */
+char* best_antisyn; /* nucleotides */
 
 char *tempstr, *sequence;
 #ifdef USE_MMAP
 int sequencefile;
 #endif
 
-
 // forward declarations
-static double linear_search(double x1, double x2, double tole, double (*func)() );
+static double linear_search(double x1, double x2, double tole, double (*func)());
 static double delta_linking(double dl);
 static double delta_linking_slope(double dl);
-void   show_probability( unsigned seqlength, float *dl, float *slope, float *probability, char *sequence, char **antisyn, char *filename );
-void   analyze_zscore( char *filename );
+void show_probability(unsigned seqlength, float* dl, float* slope, float* probability, char* sequence, char** antisyn, char* filename);
+void analyze_zscore(char* filename);
 
 static void best_anti_syn(char* antisyn, int dinucleotides, double esum);
 static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum);
 
-int      user_regret( void );
-FILE     *open_file( int mode, char *filename, char *typestr );
-void     assign_bzenergy_index( int nucleotides, char seq[] );
-unsigned input_sequence( FILE *file, int nucleotides, int showfile );
-double   assign_probability( double dl );
+int user_regret(void);
+FILE* open_file(int mode, char* filename, char* typestr);
+void assign_bzenergy_index(int nucleotides, char seq[]);
+unsigned input_sequence(FILE* file, int nucleotides, int showfile);
+double assign_probability(double dl);
 
-double find_delta_linking( int dinucleotides );
-void   calculate_zscore( double a, int maxdinucleotides, int min, int max, char *filename );
+double find_delta_linking(int dinucleotides);
+void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename);
 
-void   print_array( int points[], unsigned from, unsigned to, int printwidth );
-void   soft_copy( int width, int widthbyte, char **screen );
-void   analyze_zscore( char *filename );
+void print_array(int points[], unsigned from, unsigned to, int printwidth);
+void soft_copy(int width, int widthbyte, char** screen);
+void analyze_zscore(char* filename);
 
-
-static double linear_search( double x1, double x2, double tole, double (*func)() )
+static double linear_search(double x1, double x2, double tole, double (*func)())
 {
-  double f = func(x1);
-  double fmid = func(x2);
-  if (f * fmid >= 0.0 ) {
-    return x2;
-  }
-
-  double dx, xmid;
-  double x = (f < 0.0) ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
-  do {
-    dx *= 0.5;
-    xmid = x + dx;
-    fmid = func( xmid );
-    if( fmid <= 0.0 ) {
-      x = xmid;
+    double f = func(x1);
+    double fmid = func(x2);
+    if (f * fmid >= 0.0) {
+        return x2;
     }
-  } while(fabs(dx) > tole);
-  return x;
-}
 
+    double dx, xmid;
+    double x = (f < 0.0) ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
+    do {
+        dx *= 0.5;
+        xmid = x + dx;
+        fmid = func(xmid);
+        if (fmid <= 0.0) {
+            x = xmid;
+        }
+    } while (fabs(dx) > tole);
+    return x;
+}
 
 static double delta_linking(double dl)
 {
-  double expmini = 0.0;
-  for (int i=0; i<terms; i++) {
-    double z = dl - bztwist[i];
-    exponent[i] = z = logcoef[i] + _k_rt * z * z;
-    if( z < expmini ) {
-      expmini = z;
+    double expmini = 0.0;
+    for (int i = 0; i < terms; i++) {
+        double z = dl - bztwist[i];
+        exponent[i] = z = logcoef[i] + _k_rt * z * z;
+        if (z < expmini) {
+            expmini = z;
+        }
     }
-  }
-  expmini = (expmini < explimit) ? explimit - expmini : 0.0;
-  double sump = 0.0;
-  double sumq = 0.0;
-  for (int i=0; i<terms; i++) {
-    double z = exp(exponent[i] + expmini);
-    sumq += z;
-    sump += bztwist[i] * z;
-  }
-  sumq += exp(_k_rt * dl * dl + sigma + expmini);
-  return deltatwist - sump / sumq;
+    expmini = (expmini < explimit) ? explimit - expmini : 0.0;
+    double sump = 0.0;
+    double sumq = 0.0;
+    for (int i = 0; i < terms; i++) {
+        double z = exp(exponent[i] + expmini);
+        sumq += z;
+        sump += bztwist[i] * z;
+    }
+    sumq += exp(_k_rt * dl * dl + sigma + expmini);
+    return deltatwist - sump / sumq;
 }
-
 
 static double delta_linking_slope(double dl)
 {
-  double sump, sump1, sumq, sumq1, x, y, z;
+    double sump, sump1, sumq, sumq1, x, y, z;
 
-  double expmini = 0.0;
-  for (int i=0; i<terms; i++) {
-    z = dl - bztwist[i];
-    exponent[i] = z = logcoef[i] + _k_rt * z * z;
-    if (z < expmini) {
-      expmini = z;
-    }
-  }
-  expmini = (expmini < explimit) ? explimit - expmini : 0.0;
-  sump = sump1 = sumq = sumq1 = 0.0;
-  x = 2.0 * _k_rt;
-  for (int i=0; i<terms; i++) {
-    z = dl - bztwist[i];
-    y = exp( exponent[i] + expmini );
-    sumq += y;
-    sump += bztwist[i] * y;
-    y *= z * x;
-    sumq1 += y;
-    sump1 += bztwist[i] * y;
-  }
-  y = exp( _k_rt * dl * dl + sigma + expmini );
-  sumq += y;
-  sumq1 += x * dl * y;
-  return (sump1 - sump * sumq1 / sumq) / sumq;
-}                                       /* slope at delta linking = dl */
-
-
-void assign_bzenergy_index( int nucleotides, char seq[] )
-{
-  int  i, j, idx;
-  char c1, c2;
-
-  i = j = 0;
-  do
-    {
-      c1 = seq[i++];
-      c2 = seq[i++];
-      switch( c1 )
-        {
-          case 'a' : switch( c2 )
-                       {
-                         case 'a' : idx = 0;  break;
-                         case 't' : idx = 1;  break;
-                         case 'g' : idx = 2;  break;
-                         case 'c' : idx = 3;
-                       }  break;
-          case 't' : switch( c2 )
-                       {
-                         case 'a' : idx =  4;  break;
-                         case 't' : idx =  5;  break;
-                         case 'g' : idx =  6;  break;
-                         case 'c' : idx =  7;
-                       }  break;
-          case 'g' : switch( c2 )
-                       {
-                         case 'a' : idx =  8;  break;
-                         case 't' : idx =  9;  break;
-                         case 'g' : idx = 10;  break;
-                         case 'c' : idx = 11;
-                       }  break;
-          case 'c' : switch( c2 )
-                       {
-                         case 'a' : idx = 12;  break;
-                         case 't' : idx = 13;  break;
-                         case 'g' : idx = 14;  break;
-                         case 'c' : idx = 15;
-                       }
+    double expmini = 0.0;
+    for (int i = 0; i < terms; i++) {
+        z = dl - bztwist[i];
+        exponent[i] = z = logcoef[i] + _k_rt * z * z;
+        if (z < expmini) {
+            expmini = z;
         }
-      bzindex[j++] = idx;
-    }  while( i < nucleotides );
-}
+    }
+    expmini = (expmini < explimit) ? explimit - expmini : 0.0;
+    sump = sump1 = sumq = sumq1 = 0.0;
+    x = 2.0 * _k_rt;
+    for (int i = 0; i < terms; i++) {
+        z = dl - bztwist[i];
+        y = exp(exponent[i] + expmini);
+        sumq += y;
+        sump += bztwist[i] * y;
+        y *= z * x;
+        sumq1 += y;
+        sump1 += bztwist[i] * y;
+    }
+    y = exp(_k_rt * dl * dl + sigma + expmini);
+    sumq += y;
+    sumq1 += x * dl * y;
+    return (sump1 - sump * sumq1 / sumq) / sumq;
+} /* slope at delta linking = dl */
 
+void assign_bzenergy_index(int nucleotides, char seq[])
+{
+    int i, j, idx;
+    char c1, c2;
+
+    i = j = 0;
+    do {
+        c1 = seq[i++];
+        c2 = seq[i++];
+        switch (c1) {
+        case 'a':
+            switch (c2) {
+            case 'a':
+                idx = 0;
+                break;
+            case 't':
+                idx = 1;
+                break;
+            case 'g':
+                idx = 2;
+                break;
+            case 'c':
+                idx = 3;
+            }
+            break;
+        case 't':
+            switch (c2) {
+            case 'a':
+                idx = 4;
+                break;
+            case 't':
+                idx = 5;
+                break;
+            case 'g':
+                idx = 6;
+                break;
+            case 'c':
+                idx = 7;
+            }
+            break;
+        case 'g':
+            switch (c2) {
+            case 'a':
+                idx = 8;
+                break;
+            case 't':
+                idx = 9;
+                break;
+            case 'g':
+                idx = 10;
+                break;
+            case 'c':
+                idx = 11;
+            }
+            break;
+        case 'c':
+            switch (c2) {
+            case 'a':
+                idx = 12;
+                break;
+            case 't':
+                idx = 13;
+                break;
+            case 'g':
+                idx = 14;
+                break;
+            case 'c':
+                idx = 15;
+            }
+        }
+        bzindex[j++] = idx;
+    } while (i < nucleotides);
+}
 
 /*
 dbzed:
@@ -225,464 +246,424 @@ AS-AS SA-SA AS-SA SA-AS
 
 static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy)
 {
-  if (dinucleotides == 0) {
-    return;
-  }
-
-  int i = antisyn[0] == 0 ? 0 : 3;
-  bzenergy[0] = expdbzed[i][bzindex[0]];
-  for (int din = 1; din < dinucleotides; ++din) {
-    if (antisyn[din] == 0) {
-      i = (antisyn[din-1] == 0) ? 0 : 2;
-    } else if (antisyn[din] == 1) {
-      i = (antisyn[din-1] == 1) ? 3 : 1;
-    } else {
-      error(1, 1, "best_anti_syn: shouldn't be here");
+    if (dinucleotides == 0) {
+        return;
     }
-    bzenergy[din] = expdbzed[i][bzindex[din]];
-  }
+
+    int i = antisyn[0] == 0 ? 0 : 3;
+    bzenergy[0] = expdbzed[i][bzindex[0]];
+    for (int din = 1; din < dinucleotides; ++din) {
+        if (antisyn[din] == 0) {
+            i = (antisyn[din - 1] == 0) ? 0 : 2;
+        } else if (antisyn[din] == 1) {
+            i = (antisyn[din - 1] == 1) ? 3 : 1;
+        } else {
+            error(1, 1, "best_anti_syn: shouldn't be here");
+        }
+        bzenergy[din] = expdbzed[i][bzindex[din]];
+    }
 }
 
-
-static void antisyn_string(const char* antisyn, int dinucleotides, char* dest) {
-  for (int din = 0; din < dinucleotides; ++din) {
-    if (antisyn[din] == 0) {
-      dest[2*din] = 'A';
-      dest[2*din+1] = 'S';
-    } else {
-      dest[2*din] = 'S';
-      dest[2*din+1] = 'A';
+static void antisyn_string(const char* antisyn, int dinucleotides, char* dest)
+{
+    for (int din = 0; din < dinucleotides; ++din) {
+        if (antisyn[din] == 0) {
+            dest[2 * din] = 'A';
+            dest[2 * din + 1] = 'S';
+        } else {
+            dest[2 * din] = 'S';
+            dest[2 * din + 1] = 'A';
+        }
     }
-  }
-  dest[2*dinucleotides] = '\0';
+    dest[2 * dinucleotides] = '\0';
 }
-
 
 static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
 {
-  if (esum < best_esum) {
-    best_esum = esum;
-    calculate_bzenergy(antisyn, dinucleotides, best_bzenergy);
-    antisyn_string(antisyn, dinucleotides, best_antisyn);
-  }
+    if (esum < best_esum) {
+        best_esum = esum;
+        calculate_bzenergy(antisyn, dinucleotides, best_bzenergy);
+        antisyn_string(antisyn, dinucleotides, best_antisyn);
+    }
 }
-
 
 static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum)
 {
-  antisyn[din] = 0;
-  int i1 = (din == 0) ? 0 : ((antisyn[din-1] == 0) ? 0 : 2);
-  /*
-  if (din > 0) {
-    printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i1);
-  }
-  */
-  double e1 = dbzed[i1][bzindex[din]];
+    antisyn[din] = 0;
+    int i1 = (din == 0) ? 0 : ((antisyn[din - 1] == 0) ? 0 : 2);
+    /*
+    if (din > 0) {
+      printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i1);
+    }
+    */
+    double e1 = dbzed[i1][bzindex[din]];
 
-  if (din+1 == dinucleotides) {
-    best_anti_syn(antisyn, dinucleotides, esum + e1);
-  } else {
-    anti_syn_energy(antisyn, din+1, dinucleotides, esum + e1);
-  }
+    if (din + 1 == dinucleotides) {
+        best_anti_syn(antisyn, dinucleotides, esum + e1);
+    } else {
+        anti_syn_energy(antisyn, din + 1, dinucleotides, esum + e1);
+    }
 
-  antisyn[din] = 1;
-  int i2 = (din == 0) ? 3 : ((antisyn[din-1] == 1) ? 3 : 1);
-  /*
-  if (din > 0) {
-    printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i2);
-  }
-  */
-  double e2 = dbzed[i2][bzindex[din]];
+    antisyn[din] = 1;
+    int i2 = (din == 0) ? 3 : ((antisyn[din - 1] == 1) ? 3 : 1);
+    /*
+    if (din > 0) {
+      printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i2);
+    }
+    */
+    double e2 = dbzed[i2][bzindex[din]];
 
-  if (din+1 == dinucleotides) {
-    best_anti_syn(antisyn, dinucleotides, esum + e2);
-  } else {
-    anti_syn_energy(antisyn, din+1, dinucleotides, esum + e2);
-  }
+    if (din + 1 == dinucleotides) {
+        best_anti_syn(antisyn, dinucleotides, esum + e2);
+    } else {
+        anti_syn_energy(antisyn, din + 1, dinucleotides, esum + e2);
+    }
 }
 
-
-int user_regret( void )
+int user_regret(void)
 {
-  char c;
-  do
-    {
-      fgets( tempstr, 10, stdin );
-      c = tempstr[0];
-    }  while( c == 0 );
-  return (c == '@') ? 1 : 0;
+    char c;
+    do {
+        fgets(tempstr, 10, stdin);
+        c = tempstr[0];
+    } while (c == 0);
+    return (c == '@') ? 1 : 0;
 }
 
-
-FILE *open_file( int mode, char *filename, char *typestr )
+FILE* open_file(int mode, char* filename, char* typestr)
 {
-  static char *rwstr[] = { "w",     "r" };
-  char  *fullfile;
+    static char* rwstr[] = { "w", "r" };
+    char* fullfile;
 
-  FILE *file;
-  file = NULL;
-  fullfile = (char *) malloc(sizeof(char) * ( strlen(filename) + strlen(typestr) + 2) );
-  strcpy(fullfile, filename);
-  if(strlen(typestr) != 0)
-	{
+    FILE* file;
+    file = NULL;
+    fullfile = (char*)malloc(sizeof(char) * (strlen(filename) + strlen(typestr) + 2));
+    strcpy(fullfile, filename);
+    if (strlen(typestr) != 0) {
         strcat(fullfile, ".");
-	strcat(fullfile, typestr);
-	}
-  printf("opening %s\n", fullfile);
+        strcat(fullfile, typestr);
+    }
+    printf("opening %s\n", fullfile);
 
-  file = fopen( fullfile, rwstr[mode] );
-  free(fullfile);
-  return file;
+    file = fopen(fullfile, rwstr[mode]);
+    free(fullfile);
+    return file;
 }
 
-
-unsigned input_sequence( FILE *file, int nucleotides, int showfile )
+unsigned input_sequence(FILE* file, int nucleotides, int showfile)
 {
-unsigned length, i, j;
-char     c;
+    unsigned length, i, j;
+    char c;
 #ifdef USE_MMAP
-FILE *OUTPUT;
+    FILE* OUTPUT;
 #endif
 
-printf("inputting sequence\n");
+    printf("inputting sequence\n");
 
-length = 0;                           /* count how many bases */
-while( j=0, fgets( tempstr, 128, file ) != NULL )
-	{
-    	while( (c=tempstr[j++]) != 0 )
-		{
-      		if( c == 'a'  ||  c == 't'  ||  c == 'g'  ||  c == 'c' || c == 'A'  ||  c == 'T'  ||  c == 'G'  ||  c == 'C' )
-			{
-        		length ++;
-			}
-		}
-	}
+    length = 0; /* count how many bases */
+    while (j = 0, fgets(tempstr, 128, file) != NULL) {
+        while ((c = tempstr[j++]) != 0) {
+            if (c == 'a' || c == 't' || c == 'g' || c == 'c' || c == 'A' || c == 'T' || c == 'G' || c == 'C') {
+                length++;
+            }
+        }
+    }
 
 #ifndef USE_MMAP
-sequence = (char *) malloc( length+nucleotides );
+    sequence = (char*)malloc(length + nucleotides);
 #else
-sequence = (char *) malloc( nucleotides );
-OUTPUT = (FILE *) fopen ("/usr/local/apache/htdocs/zhunt/temp", "w");
+    sequence = (char*)malloc(nucleotides);
+    OUTPUT = (FILE*)fopen("/usr/local/apache/htdocs/zhunt/temp", "w");
 #endif
 
-rewind( file );
+    rewind(file);
 
-if( showfile )
-	{
-    	printf( "\n" );
-	}
-i = 0;
-while( j=0, fgets( tempstr, 128, file ) != NULL )
-	{
-    	while( (c=tempstr[j++]) != 0 )
-		{
-      		if( c == 'a'  ||  c == 't'  ||  c == 'g'  ||  c == 'c' || c == 'A'  ||  c == 'T'  ||  c == 'G'  ||  c == 'C' )
-        		{
-          		if( c == 'A')
-				{
-				c = 'a';
-				}
-          		if( c == 'T')
-				{
-				c = 't';
-				}
-          		if( c == 'G')
-				{
-				c = 'g';
-				};
-          		if( c == 'C')
-				{
-				c = 'c';
-				}
+    if (showfile) {
+        printf("\n");
+    }
+    i = 0;
+    while (j = 0, fgets(tempstr, 128, file) != NULL) {
+        while ((c = tempstr[j++]) != 0) {
+            if (c == 'a' || c == 't' || c == 'g' || c == 'c' || c == 'A' || c == 'T' || c == 'G' || c == 'C') {
+                if (c == 'A') {
+                    c = 'a';
+                }
+                if (c == 'T') {
+                    c = 't';
+                }
+                if (c == 'G') {
+                    c = 'g';
+                };
+                if (c == 'C') {
+                    c = 'c';
+                }
 #ifndef USE_MMAP
-          		sequence[i++] = c;
+                sequence[i++] = c;
 #else
-			fprintf(OUTPUT,"%c",c);
-			if(i < nucleotides)
-				{
-          			sequence[i++] = c;
-				}
+                fprintf(OUTPUT, "%c", c);
+                if (i < nucleotides) {
+                    sequence[i++] = c;
+                }
 #endif
-        		}
-		}
-	}
- for( j=0; j<nucleotides; j++ )        /* assume circular nucleotides */
-	{
+            }
+        }
+    }
+    for (j = 0; j < nucleotides; j++) /* assume circular nucleotides */
+    {
 #ifndef USE_MMAP
-    	sequence[i++] = sequence[j];
+        sequence[i++] = sequence[j];
 #else
-	fprintf(OUTPUT,"%c",sequence[j]);
+        fprintf(OUTPUT, "%c", sequence[j]);
 #endif
-	}
+    }
 #ifdef USE_MMAP
-	close(OUTPUT);
-	sequencefile = open ("/usr/local/apache/htdocs/zhunt/temp", O_RDWR, NULL);
-	free(sequence);
-	sequence = (char *) mmap(0,length, PROT_READ | PROT_WRITE,MAP_SHARED,sequencefile,0);
+    close(OUTPUT);
+    sequencefile = open("/usr/local/apache/htdocs/zhunt/temp", O_RDWR, NULL);
+    free(sequence);
+    sequence = (char*)mmap(0, length, PROT_READ | PROT_WRITE, MAP_SHARED, sequencefile, 0);
 #endif
 
-return length;
+    return length;
 }
-
 
 /* calculate the probability of the value 'dl' in a Gaussian distribution */
 /* from "Data Reduction and Error Analysis for the Physical Science" */
 /* Philip R. Bevington, 1969, McGraw-Hill, Inc */
 
-
-double assign_probability( double dl )
+double assign_probability(double dl)
 {
-  static double average = 29.6537135;
-  static double stdv = 2.71997;
-  static double _sqrt2 = 0.70710678118654752440;   /* 1/sqrt(2) */
-  static double _sqrtpi = 0.564189583546;  /* 1/sqrt(pi) */
+    static double average = 29.6537135;
+    static double stdv = 2.71997;
+    static double _sqrt2 = 0.70710678118654752440; /* 1/sqrt(2) */
+    static double _sqrtpi = 0.564189583546; /* 1/sqrt(pi) */
 
-  double x, y, z, k, sum;
+    double x, y, z, k, sum;
 
-  z = fabs( dl - average ) / stdv;
-  x = z * _sqrt2;
-  y = _sqrtpi * exp( -x * x );
-  z *= z;
-  k = 1.0;
-  sum = 0.0;
-  do
-    {
-      sum += x;
-      k += 2.0;
-      x *= z / k;
-    }  while( sum + x > sum );
-  z = 0.5 - y * sum;                    /* probability of each tail */
-  return (dl > average) ? z : 1.0/z;
+    z = fabs(dl - average) / stdv;
+    x = z * _sqrt2;
+    y = _sqrtpi * exp(-x * x);
+    z *= z;
+    k = 1.0;
+    sum = 0.0;
+    do {
+        sum += x;
+        k += 2.0;
+        x *= z / k;
+    } while (sum + x > sum);
+    z = 0.5 - y * sum; /* probability of each tail */
+    return (dl > average) ? z : 1.0 / z;
 }
 
-
-int main( int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-  static double rt=0.59004;             /* 0.00198*298 */
-  static double a=0.357, b=0.4;         /* a = 2 * (1/10.5 + 1/12) */
-  double   ab;
-  int      i, j, nucleotides, dinucleotides;
-  int min, max;
+    static double rt = 0.59004; /* 0.00198*298 */
+    static double a = 0.357, b = 0.4; /* a = 2 * (1/10.5 + 1/12) */
+    double ab;
+    int i, j, nucleotides, dinucleotides;
+    int min, max;
 
-  if(argc < 5)
-	{
-	printf("usage: zhunt windowsize minsize maxsize datafile\n");
-	exit(1);
-	}
-  tempstr = (char *) malloc( 128 );
-  dinucleotides = atoi((char *)argv[1]);
-  min = atoi((char *)argv[2]);
-  max = atoi((char *)argv[3]);
+    if (argc < 5) {
+        printf("usage: zhunt windowsize minsize maxsize datafile\n");
+        exit(1);
+    }
+    tempstr = (char*)malloc(128);
+    dinucleotides = atoi((char*)argv[1]);
+    min = atoi((char*)argv[2]);
+    max = atoi((char*)argv[3]);
 
-  printf("dinucleotides %d\n", dinucleotides);
-  printf("min/max %d %d\n", min, max);
-  printf("operating on %s\n", (char *)argv[4]);
+    printf("dinucleotides %d\n", dinucleotides);
+    printf("min/max %d %d\n", min, max);
+    printf("operating on %s\n", (char*)argv[4]);
 
-  nucleotides = 2 * dinucleotides;
+    nucleotides = 2 * dinucleotides;
 
-  best_antisyn = (char *) malloc( nucleotides+1 );
+    best_antisyn = (char*)malloc(nucleotides + 1);
 
-  bzindex = (int *) calloc( dinucleotides, sizeof(int) );
-  bzenergy = (double *) calloc( dinucleotides, sizeof(double) );
-  best_bzenergy = (double *) calloc( dinucleotides, sizeof(double) );
+    bzindex = (int*)calloc(dinucleotides, sizeof(int));
+    bzenergy = (double*)calloc(dinucleotides, sizeof(double));
+    best_bzenergy = (double*)calloc(dinucleotides, sizeof(double));
 
-  bztwist = (double *) calloc( dinucleotides, sizeof(double) );
-  ab = b + b;
-  for( i=0; i<dinucleotides; i++ )
-    {
-      ab += a;
-      bztwist[i] = ab;
+    bztwist = (double*)calloc(dinucleotides, sizeof(double));
+    ab = b + b;
+    for (i = 0; i < dinucleotides; i++) {
+        ab += a;
+        bztwist[i] = ab;
     }
 
-  for( i=0; i<4; i++ )
-    for( j=0; j<16; j++ )
-      expdbzed[i][j] = exp( -dbzed[i][j] / rt );
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 16; j++)
+            expdbzed[i][j] = exp(-dbzed[i][j] / rt);
 
-  logcoef = (double *) calloc( dinucleotides, sizeof(double) );
-  exponent = (double *) calloc( dinucleotides, sizeof(double) );
+    logcoef = (double*)calloc(dinucleotides, sizeof(double));
+    exponent = (double*)calloc(dinucleotides, sizeof(double));
 
-  calculate_zscore( a, dinucleotides, min, max, (char *)argv[4] );
+    calculate_zscore(a, dinucleotides, min, max, (char*)argv[4]);
 #ifndef PROB_ONLY
-  analyze_zscore((char *)argv[4]);
+    analyze_zscore((char*)argv[4]);
 #endif
 
-  free( exponent );
-  free( logcoef );
-  free( bztwist );
-  free( best_bzenergy );
-  free( bzenergy );
-  free( bzindex );
-  free( best_antisyn );
-  free( tempstr );
-  return 0;
+    free(exponent);
+    free(logcoef);
+    free(bztwist);
+    free(best_bzenergy);
+    free(bzenergy);
+    free(bzindex);
+    free(best_antisyn);
+    free(tempstr);
+    return 0;
 }
 
-
-double find_delta_linking( int dinucleotides )
+double find_delta_linking(int dinucleotides)
 {
-  double sum;
-  int    i, j;
+    double sum;
+    int i, j;
 
-  for( i=0; i<dinucleotides; i++ )
-    bzenergy[i] = 1.0;
-  for( i=0; i<dinucleotides; i++ )
-    {
-      sum = 0.0;
-      for( j=0; j<dinucleotides-i; j++ )
-        {
-          bzenergy[j] *= best_bzenergy[i+j];
-          sum += bzenergy[j];
+    for (i = 0; i < dinucleotides; i++)
+        bzenergy[i] = 1.0;
+    for (i = 0; i < dinucleotides; i++) {
+        sum = 0.0;
+        for (j = 0; j < dinucleotides - i; j++) {
+            bzenergy[j] *= best_bzenergy[i + j];
+            sum += bzenergy[j];
         }
-      logcoef[i] = log( sum );
+        logcoef[i] = log(sum);
     }
-  terms = dinucleotides;
-  return linear_search( 10.0, 50.0, 0.001, delta_linking );
+    terms = dinucleotides;
+    return linear_search(10.0, 50.0, 0.001, delta_linking);
 }
 
-
-void calculate_zscore( double a, int maxdinucleotides, int min, int max, char *filename )
+void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename)
 {
-  static double pideg=57.29577951;      /* 180/pi */
-  char     *bestantisyn;
-  FILE     *file;
-  unsigned seqlength, i;
-  int      fromdin, todin, din, nucleotides;
-  long     begintime, endtime;
-  double   dl, slope, probability, bestdl;
-  float    initesum;
+    static double pideg = 57.29577951; /* 180/pi */
+    char* bestantisyn;
+    FILE* file;
+    unsigned seqlength, i;
+    int fromdin, todin, din, nucleotides;
+    long begintime, endtime;
+    double dl, slope, probability, bestdl;
+    float initesum;
 
-  fromdin = min;
-  todin = max;
-  printf("calculating zscore\n");
+    fromdin = min;
+    todin = max;
+    printf("calculating zscore\n");
 
-  file = open_file( 1, filename, "" );
-  if( file == NULL )
-	{
-	printf("couldn't open %s!\n", filename);
+    file = open_file(1, filename, "");
+    if (file == NULL) {
+        printf("couldn't open %s!\n", filename);
         return;
-	}
-  seqlength = input_sequence( file, 2*maxdinucleotides, 0 );
-  fclose( file );
+    }
+    seqlength = input_sequence(file, 2 * maxdinucleotides, 0);
+    fclose(file);
 
-  file = open_file( 0, filename, "Z-SCORE" );
-  if( file == NULL )
-    	{
+    file = open_file(0, filename, "Z-SCORE");
+    if (file == NULL) {
 #ifndef USE_MMAP
-      	free( sequence );
+        free(sequence);
 #else
-	munmap(sequence, seqlength);
-	close(sequencefile);
+        munmap(sequence, seqlength);
+        close(sequencefile);
 #endif
-      	return;
-    	}
+        return;
+    }
 
-  if( todin > maxdinucleotides )
-	{
-    	todin = maxdinucleotides;
-	}
-  if( fromdin > todin )
-	{
-    	fromdin = todin;
-	}
-  nucleotides = 2 * todin;
+    if (todin > maxdinucleotides) {
+        todin = maxdinucleotides;
+    }
+    if (fromdin > todin) {
+        fromdin = todin;
+    }
+    nucleotides = 2 * todin;
 
 #ifndef PROB_ONLY
-  fprintf( file, "%s %u %d %d\n", filename, seqlength, fromdin, todin );
+    fprintf(file, "%s %u %d %d\n", filename, seqlength, fromdin, todin);
 #endif
 
-  a /= 2.0;
-  initesum = 10.0 * todin;
-  bestantisyn = (char *) malloc( nucleotides+1 );
-  char* antisyn = (char *) malloc( nucleotides+1 );
+    a /= 2.0;
+    initesum = 10.0 * todin;
+    bestantisyn = (char*)malloc(nucleotides + 1);
+    char* antisyn = (char*)malloc(nucleotides + 1);
 
-
-  time( &begintime );
-  for( i=0; i<seqlength; i++ )
-    {
-      assign_bzenergy_index( nucleotides, sequence+i );
-      bestdl = 50.0;
-      for( din=fromdin; din<=todin; din++ )
-        {
-          best_esum = initesum;
-          deltatwist = a * (double)din;
-          antisyn[2*din] = 0;
-          anti_syn_energy(antisyn, 0, din, 0.0 );           /* esum = 0.0 */
-          dl = find_delta_linking( din );
-          if( dl < bestdl )
-            {
-              bestdl = dl;
-              strcpy( bestantisyn, best_antisyn );
+    time(&begintime);
+    for (i = 0; i < seqlength; i++) {
+        assign_bzenergy_index(nucleotides, sequence + i);
+        bestdl = 50.0;
+        for (din = fromdin; din <= todin; din++) {
+            best_esum = initesum;
+            deltatwist = a * (double)din;
+            antisyn[2 * din] = 0;
+            anti_syn_energy(antisyn, 0, din, 0.0); /* esum = 0.0 */
+            dl = find_delta_linking(din);
+            if (dl < bestdl) {
+                bestdl = dl;
+                strcpy(bestantisyn, best_antisyn);
             }
         }
 #ifndef PROB_ONLY
-      slope = atan( delta_linking_slope( bestdl ) ) * pideg;
+        slope = atan(delta_linking_slope(bestdl)) * pideg;
 #endif
-      probability = assign_probability( bestdl );
+        probability = assign_probability(bestdl);
 #ifndef PROB_ONLY
-      fprintf( file, " %7.3lf %7.3lf %le %s\n", bestdl, slope, probability, bestantisyn );
+        fprintf(file, " %7.3lf %7.3lf %le %s\n", bestdl, slope, probability, bestantisyn);
 #else
-      fprintf( file, " %7.3lf %le\n", bestdl, probability );
+        fprintf(file, " %7.3lf %le\n", bestdl, probability);
 #endif
     }
-  time( &endtime );
+    time(&endtime);
 
-  free( bestantisyn );
-  free(antisyn);
-  fclose( file );
-  printf( "\n run time=%ld sec\n", endtime-begintime );
+    free(bestantisyn);
+    free(antisyn);
+    fclose(file);
+    printf("\n run time=%ld sec\n", endtime - begintime);
 #ifndef USE_MMAP
-  free( sequence );
+    free(sequence);
 #else
-  munmap(sequence,seqlength);
-  close(sequencefile);
+    munmap(sequence, seqlength);
+    close(sequencefile);
 #endif
 }
 
-
-void analyze_zscore( char *filename )
+void analyze_zscore(char* filename)
 {
-  float    *dl, *slope, *probability;
-  unsigned seqlength, i;
-  char     **antisyn;
-  FILE     *file;
-  int      fromdin, todin, nucleotides;
+    float *dl, *slope, *probability;
+    unsigned seqlength, i;
+    char** antisyn;
+    FILE* file;
+    int fromdin, todin, nucleotides;
 
-  printf("analyzing_zscore\n");
+    printf("analyzing_zscore\n");
 
-  file = open_file( 1, filename, "Z-SCORE" );
-  if( file == NULL )
-	{
-	printf("couldn't open %s.Z-SCORE!\n",filename);
+    file = open_file(1, filename, "Z-SCORE");
+    if (file == NULL) {
+        printf("couldn't open %s.Z-SCORE!\n", filename);
         return;
-	}
-  fscanf( file, "%s %u %d %d", tempstr, &seqlength, &fromdin, &todin );
-  nucleotides = 2 * todin;
-  dl = (float *) calloc( seqlength, sizeof(float) );
-  slope = (float *) calloc( seqlength, sizeof(float) );
-  probability = (float *) calloc( seqlength, sizeof(float) );
-  antisyn = (char **) calloc( seqlength, sizeof(char *) );
-
-  for( i=0; i<seqlength; i++ )
-    {
-      fscanf( file, "%f %f %f %s", dl+i, slope+i, probability+i, tempstr );
-      antisyn[i] = strdup( tempstr );
     }
-  fclose( file );
+    fscanf(file, "%s %u %d %d", tempstr, &seqlength, &fromdin, &todin);
+    nucleotides = 2 * todin;
+    dl = (float*)calloc(seqlength, sizeof(float));
+    slope = (float*)calloc(seqlength, sizeof(float));
+    probability = (float*)calloc(seqlength, sizeof(float));
+    antisyn = (char**)calloc(seqlength, sizeof(char*));
 
-  file = open_file(1, filename , "");
-  input_sequence( file, nucleotides, 0 );
-  fclose( file );
+    for (i = 0; i < seqlength; i++) {
+        fscanf(file, "%f %f %f %s", dl + i, slope + i, probability + i, tempstr);
+        antisyn[i] = strdup(tempstr);
+    }
+    fclose(file);
 
-  free( dl );
-  free( slope );
-  free( probability );
-  for( i=0; i<seqlength; i++ )
-    free( antisyn[i] );
-  free( antisyn );
+    file = open_file(1, filename, "");
+    input_sequence(file, nucleotides, 0);
+    fclose(file);
+
+    free(dl);
+    free(slope);
+    free(probability);
+    for (i = 0; i < seqlength; i++)
+        free(antisyn[i]);
+    free(antisyn);
 #ifndef USE_MMAP
-  free( sequence );
+    free(sequence);
 #else
-  munmap(sequence,seqlength);
-  close(sequencefile);
+    munmap(sequence, seqlength);
+    close(sequencefile);
 #endif
 }
