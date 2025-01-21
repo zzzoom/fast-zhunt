@@ -252,14 +252,14 @@ static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* b
 static void antisyn_string(const char* antisyn, int dinucleotides, char* dest) {
   for (int din = 0; din < dinucleotides; ++din) {
     if (antisyn[din] == 0) {
-      best_antisyn[2*din] = 'A';
-      best_antisyn[2*din+1] = 'S';
+      dest[2*din] = 'A';
+      dest[2*din+1] = 'S';
     } else {
-      best_antisyn[2*din] = 'S';
-      best_antisyn[2*din+1] = 'A';
+      dest[2*din] = 'S';
+      dest[2*din+1] = 'A';
     }
   }
-  best_antisyn[2*dinucleotides] = '\0';
+  dest[2*dinucleotides] = '\0';
 }
 
 
