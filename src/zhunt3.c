@@ -60,9 +60,9 @@ static const double dbzed[4][16] = {
 static double expdbzed[4][16]; /* exp(-dbzed/rt) */
 static int* bzindex; /* dinucleotides */
 
-double *bzenergy, *best_bzenergy; /* dinucleotides */
-double best_esum; /* assigned before call to anti_syn_energy() */
-char* best_antisyn; /* nucleotides */
+static double *bzenergy, *best_bzenergy; /* dinucleotides */
+static double best_esum; /* assigned before call to anti_syn_energy() */
+static char* best_antisyn; /* nucleotides */
 
 char *tempstr, *sequence;
 #ifdef USE_MMAP
@@ -73,24 +73,19 @@ int sequencefile;
 static double linear_search(double x1, double x2, double tole, double (*func)());
 static double delta_linking(double dl);
 static double delta_linking_slope(double dl);
-void show_probability(unsigned seqlength, float* dl, float* slope, float* probability, char* sequence, char** antisyn, char* filename);
-void analyze_zscore(char* filename);
+static double find_delta_linking(int dinucleotides);
+
+static double assign_probability(double dl);
+
+static void analyze_zscore(char* filename);
+static void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename);
 
 static void best_anti_syn(char* antisyn, int dinucleotides, double esum);
 static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum);
 
-int user_regret(void);
-FILE* open_file(int mode, char* filename, char* typestr);
-void assign_bzenergy_index(int nucleotides, char seq[]);
-unsigned input_sequence(FILE* file, int nucleotides, int showfile);
-double assign_probability(double dl);
-
-double find_delta_linking(int dinucleotides);
-void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename);
-
-void print_array(int points[], unsigned from, unsigned to, int printwidth);
-void soft_copy(int width, int widthbyte, char** screen);
-void analyze_zscore(char* filename);
+static FILE* open_file(int mode, char* filename, char* typestr);
+static void assign_bzenergy_index(int nucleotides, char seq[]);
+static unsigned input_sequence(FILE* file, int nucleotides, int showfile);
 
 static double linear_search(double x1, double x2, double tole, double (*func)())
 {
@@ -165,7 +160,7 @@ static double delta_linking_slope(double dl)
     return (sump1 - sump * sumq1 / sumq) / sumq;
 } /* slope at delta linking = dl */
 
-void assign_bzenergy_index(int nucleotides, char seq[])
+static void assign_bzenergy_index(int nucleotides, char seq[])
 {
     int i, j, idx;
     char c1, c2;
@@ -320,17 +315,7 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
     }
 }
 
-int user_regret(void)
-{
-    char c;
-    do {
-        fgets(tempstr, 10, stdin);
-        c = tempstr[0];
-    } while (c == 0);
-    return (c == '@') ? 1 : 0;
-}
-
-FILE* open_file(int mode, char* filename, char* typestr)
+static FILE* open_file(int mode, char* filename, char* typestr)
 {
     static char* rwstr[] = { "w", "r" };
     char* fullfile;
@@ -350,7 +335,7 @@ FILE* open_file(int mode, char* filename, char* typestr)
     return file;
 }
 
-unsigned input_sequence(FILE* file, int nucleotides, int showfile)
+static unsigned input_sequence(FILE* file, int nucleotides, int showfile)
 {
     unsigned length, i, j;
     char c;
@@ -430,7 +415,7 @@ unsigned input_sequence(FILE* file, int nucleotides, int showfile)
 /* from "Data Reduction and Error Analysis for the Physical Science" */
 /* Philip R. Bevington, 1969, McGraw-Hill, Inc */
 
-double assign_probability(double dl)
+static double assign_probability(double dl)
 {
     static double average = 29.6537135;
     static double stdv = 2.71997;
@@ -513,7 +498,7 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-double find_delta_linking(int dinucleotides)
+static double find_delta_linking(int dinucleotides)
 {
     double sum;
     int i, j;
@@ -532,7 +517,7 @@ double find_delta_linking(int dinucleotides)
     return linear_search(10.0, 50.0, 0.001, delta_linking);
 }
 
-void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename)
+static void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename)
 {
     static double pideg = 57.29577951; /* 180/pi */
     char* bestantisyn;
@@ -622,7 +607,7 @@ void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* fi
 #endif
 }
 
-void analyze_zscore(char* filename)
+static void analyze_zscore(char* filename)
 {
     float *dl, *slope, *probability;
     unsigned seqlength, i;
