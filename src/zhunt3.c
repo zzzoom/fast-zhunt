@@ -316,7 +316,6 @@ int user_regret( void )
 
 FILE *open_file( int mode, char *filename, char *typestr )
 {
-  static char *iostr[] = { "output", "input" };
   static char *rwstr[] = { "w",     "r" };
   char  *fullfile;
 
@@ -329,7 +328,7 @@ FILE *open_file( int mode, char *filename, char *typestr )
         strcat(fullfile, ".");
 	strcat(fullfile, typestr);
 	}
-printf("opening %s\n", fullfile);
+  printf("opening %s\n", fullfile);
 
   file = fopen( fullfile, rwstr[mode] );
   free(fullfile);
@@ -462,7 +461,7 @@ int main( int argc, char *argv[])
   static double rt=0.59004;             /* 0.00198*298 */
   static double a=0.357, b=0.4;         /* a = 2 * (1/10.5 + 1/12) */
   double   ab;
-  int      i, j, nucleotides, dinucleotides, select;
+  int      i, j, nucleotides, dinucleotides;
   int min, max;
 
   if(argc < 5)
@@ -546,7 +545,7 @@ void calculate_zscore( double a, int maxdinucleotides, int min, int max, char *f
   static double pideg=57.29577951;      /* 180/pi */
   char     *bestantisyn;
   FILE     *file;
-  unsigned seqlength, i, j;
+  unsigned seqlength, i;
   int      fromdin, todin, din, nucleotides;
   long     begintime, endtime;
   double   dl, slope, probability, bestdl;
@@ -643,7 +642,7 @@ void calculate_zscore( double a, int maxdinucleotides, int min, int max, char *f
 void analyze_zscore( char *filename )
 {
   float    *dl, *slope, *probability;
-  unsigned seqlength, i, select;
+  unsigned seqlength, i;
   char     **antisyn;
   FILE     *file;
   int      fromdin, todin, nucleotides;
