@@ -22,6 +22,8 @@ The EMBO Journal, Vol.5, No.10, pp2737-2744, 1986
 With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 */
 
+#include "delta_linking.h"
+
 #include <error.h>
 #include <math.h>
 #include <stdio.h>
@@ -36,15 +38,6 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 #include <sys/stat.h>
 #include <sys/types.h>
 #endif
-
-static int terms;
-static double deltatwist;
-
-static const double _k_rt = -0.2521201; /* -1100/4363 */
-static const double sigma = 16.94800353; /* 10/RT */
-static const double explimit = -600.0;
-
-static double *bztwist, *logcoef, *exponent;
 
 /* Delta BZ Energy of Dinucleotide */
 static const double dbzed[4][16] = {
@@ -69,12 +62,6 @@ char *tempstr, *sequence;
 int sequencefile;
 #endif
 
-// forward declarations
-static double linear_search(double x1, double x2, double tole, double (*func)());
-static double delta_linking(double dl);
-static double delta_linking_slope(double dl);
-static double find_delta_linking(int dinucleotides);
-
 static double assign_probability(double dl);
 
 static void analyze_zscore(char* filename);
@@ -86,79 +73,6 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
 static FILE* open_file(int mode, char* filename, char* typestr);
 static void assign_bzenergy_index(int nucleotides, char seq[]);
 static unsigned input_sequence(FILE* file, int nucleotides, int showfile);
-
-static double linear_search(double x1, double x2, double tole, double (*func)())
-{
-    double f = func(x1);
-    double fmid = func(x2);
-    if (f * fmid >= 0.0) {
-        return x2;
-    }
-
-    double dx, xmid;
-    double x = (f < 0.0) ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
-    do {
-        dx *= 0.5;
-        xmid = x + dx;
-        fmid = func(xmid);
-        if (fmid <= 0.0) {
-            x = xmid;
-        }
-    } while (fabs(dx) > tole);
-    return x;
-}
-
-static double delta_linking(double dl)
-{
-    double expmini = 0.0;
-    for (int i = 0; i < terms; i++) {
-        double z = dl - bztwist[i];
-        exponent[i] = z = logcoef[i] + _k_rt * z * z;
-        if (z < expmini) {
-            expmini = z;
-        }
-    }
-    expmini = (expmini < explimit) ? explimit - expmini : 0.0;
-    double sump = 0.0;
-    double sumq = 0.0;
-    for (int i = 0; i < terms; i++) {
-        double z = exp(exponent[i] + expmini);
-        sumq += z;
-        sump += bztwist[i] * z;
-    }
-    sumq += exp(_k_rt * dl * dl + sigma + expmini);
-    return deltatwist - sump / sumq;
-}
-
-static double delta_linking_slope(double dl)
-{
-    double sump, sump1, sumq, sumq1, x, y, z;
-
-    double expmini = 0.0;
-    for (int i = 0; i < terms; i++) {
-        z = dl - bztwist[i];
-        exponent[i] = z = logcoef[i] + _k_rt * z * z;
-        if (z < expmini) {
-            expmini = z;
-        }
-    }
-    expmini = (expmini < explimit) ? explimit - expmini : 0.0;
-    sump = sump1 = sumq = sumq1 = 0.0;
-    x = 2.0 * _k_rt;
-    for (int i = 0; i < terms; i++) {
-        z = dl - bztwist[i];
-        y = exp(exponent[i] + expmini);
-        sumq += y;
-        sump += bztwist[i] * y;
-        y *= z * x;
-        sumq1 += y;
-        sump1 += bztwist[i] * y;
-    }
-    y = exp(_k_rt * dl * dl + sigma + expmini);
-    sumq += y;
-    sumq1 += x * dl * y;
-    return (sump1 - sump * sumq1 / sumq) / sumq;
-} /* slope at delta linking = dl */
 
 static void assign_bzenergy_index(int nucleotides, char seq[])
 {
@@ -441,9 +355,9 @@ static double assign_probability(double dl)
 
 int main(int argc, char* argv[])
 {
+    static double a = 0.357;
     static double rt = 0.59004; /* 0.00198*298 */
-    static double a = 0.357, b = 0.4; /* a = 2 * (1/10.5 + 1/12) */
-    double ab;
+
     int i, j, nucleotides, dinucleotides;
     int min, max;
 
@@ -462,59 +376,28 @@ int main(int argc, char* argv[])
 
     nucleotides = 2 * dinucleotides;
 
+    delta_linking_init(dinucleotides);
+
     best_antisyn = (char*)malloc(nucleotides + 1);
 
     bzindex = (int*)calloc(dinucleotides, sizeof(int));
-    bzenergy = (double*)calloc(dinucleotides, sizeof(double));
     best_bzenergy = (double*)calloc(dinucleotides, sizeof(double));
-
-    bztwist = (double*)calloc(dinucleotides, sizeof(double));
-    ab = b + b;
-    for (i = 0; i < dinucleotides; i++) {
-        ab += a;
-        bztwist[i] = ab;
-    }
 
     for (i = 0; i < 4; i++)
         for (j = 0; j < 16; j++)
             expdbzed[i][j] = exp(-dbzed[i][j] / rt);
-
-    logcoef = (double*)calloc(dinucleotides, sizeof(double));
-    exponent = (double*)calloc(dinucleotides, sizeof(double));
 
     calculate_zscore(a, dinucleotides, min, max, (char*)argv[4]);
 #ifndef PROB_ONLY
     analyze_zscore((char*)argv[4]);
 #endif
 
-    free(exponent);
-    free(logcoef);
-    free(bztwist);
     free(best_bzenergy);
-    free(bzenergy);
     free(bzindex);
     free(best_antisyn);
     free(tempstr);
+    delta_linking_destroy();
     return 0;
-}
-
-static double find_delta_linking(int dinucleotides)
-{
-    double sum;
-    int i, j;
-
-    for (i = 0; i < dinucleotides; i++)
-        bzenergy[i] = 1.0;
-    for (i = 0; i < dinucleotides; i++) {
-        sum = 0.0;
-        for (j = 0; j < dinucleotides - i; j++) {
-            bzenergy[j] *= best_bzenergy[i + j];
-            sum += bzenergy[j];
-        }
-        logcoef[i] = log(sum);
-    }
-    terms = dinucleotides;
-    return linear_search(10.0, 50.0, 0.001, delta_linking);
 }
 
 static void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename)
@@ -574,10 +457,9 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
         bestdl = 50.0;
         for (din = fromdin; din <= todin; din++) {
             best_esum = initesum;
-            deltatwist = a * (double)din;
             antisyn[2 * din] = 0;
             anti_syn_energy(antisyn, 0, din, 0.0); /* esum = 0.0 */
-            dl = find_delta_linking(din);
+            dl = find_delta_linking(din, a * (double)din, best_bzenergy);
             if (dl < bestdl) {
                 bestdl = dl;
                 strcpy(bestantisyn, best_antisyn);
