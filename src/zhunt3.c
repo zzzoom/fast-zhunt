@@ -148,10 +148,25 @@ static void assign_bzenergy_index(int nucleotides, char seq[])
     } while (i < nucleotides);
 }
 
-/*
-dbzed:
-AS-AS SA-SA AS-SA SA-AS
-*/
+static void antisyn_string_bzenergy(const char* antisyn_string, int dinucleotides, double* bzenergy)
+{
+    if (dinucleotides == 0) {
+        return;
+    }
+
+    int i = antisyn_string[0] == 'A' ? 0 : 3;
+    bzenergy[0] = expdbzed[i][bzindex[0]];
+    for (int din = 1; din < dinucleotides; ++din) {
+        if (antisyn_string[2*din] == 'A') {
+            i = (antisyn_string[2*din - 2] == 'A') ? 0 : 2;
+        } else if (antisyn_string[2*din] == 'S') {
+            i = (antisyn_string[2*din - 2] == 'S') ? 3 : 1;
+        } else {
+            error(1, 1, "antisyn_string_bzenergy: shouldn't be here");
+        }
+        bzenergy[din] = expdbzed[i][bzindex[din]];
+    }
+}
 
 static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy)
 {
@@ -167,7 +182,7 @@ static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* b
         } else if (antisyn[din] == 1) {
             i = (antisyn[din - 1] == 1) ? 3 : 1;
         } else {
-            error(1, 1, "best_anti_syn: shouldn't be here");
+            error(1, 1, "calculate_bzenergy: shouldn't be here");
         }
         bzenergy[din] = expdbzed[i][bzindex[din]];
     }
@@ -191,7 +206,6 @@ static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
 {
     if (esum < best_esum) {
         best_esum = esum;
-        calculate_bzenergy(antisyn, dinucleotides, best_bzenergy);
         antisyn_string(antisyn, dinucleotides, best_antisyn);
     }
 }
@@ -459,6 +473,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
             best_esum = initesum;
             antisyn[2 * din] = 0;
             anti_syn_energy(antisyn, 0, din, 0.0); /* esum = 0.0 */
+            antisyn_string_bzenergy(best_antisyn, din, best_bzenergy);
             dl = find_delta_linking(din, a * (double)din, best_bzenergy);
             if (dl < bestdl) {
                 bestdl = dl;
