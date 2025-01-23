@@ -51,6 +51,8 @@ static const double dbzed[4][16] = {
     { 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 }
 };
 static double expdbzed[4][16]; /* exp(-dbzed/rt) */
+static double* flat_dbzed;
+static int flat_dbzed_stride;
 static int* bzindex; /* dinucleotides */
 
 static double *bzenergy, *best_bzenergy; /* dinucleotides */
@@ -77,12 +79,10 @@ static unsigned input_sequence(FILE* file, int nucleotides, int showfile);
 static void assign_bzenergy_index(int nucleotides, char seq[])
 {
     int i, j, idx;
-    char c1, c2;
-
     i = j = 0;
     do {
-        c1 = seq[i++];
-        c2 = seq[i++];
+        char c1 = seq[i++];
+        char c2 = seq[i++];
         switch (c1) {
         case 'a':
             switch (c2) {
@@ -210,6 +210,15 @@ static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
     }
 }
 
+static void flatten_dbzed(int dinucleotides, const int* bzindex, double* flat_dbzed) {
+    for (int i = 0; i < 4; ++i) {
+        for (int din = 0; din < dinucleotides; ++din) {
+            flat_dbzed[i * dinucleotides + din] = dbzed[i][bzindex[din]];
+        }
+    }
+    flat_dbzed_stride = dinucleotides;
+}
+
 static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum)
 {
     antisyn[din] = 0;
@@ -219,7 +228,8 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
       printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i1);
     }
     */
-    double e1 = dbzed[i1][bzindex[din]];
+    // double e1 = dbzed[i1][bzindex[din]];
+    double e1 = flat_dbzed[i1 * flat_dbzed_stride + din];
 
     if (din + 1 == dinucleotides) {
         best_anti_syn(antisyn, dinucleotides, esum + e1);
@@ -234,7 +244,8 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
       printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i2);
     }
     */
-    double e2 = dbzed[i2][bzindex[din]];
+    // double e2 = dbzed[i2][bzindex[din]];
+    double e2 = flat_dbzed[i2 * flat_dbzed_stride + din];
 
     if (din + 1 == dinucleotides) {
         best_anti_syn(antisyn, dinucleotides, esum + e2);
@@ -397,6 +408,8 @@ int main(int argc, char* argv[])
     bzindex = (int*)calloc(dinucleotides, sizeof(int));
     best_bzenergy = (double*)calloc(dinucleotides, sizeof(double));
 
+    flat_dbzed = (double*) calloc(4 * dinucleotides, sizeof(double));
+
     for (i = 0; i < 4; i++)
         for (j = 0; j < 16; j++)
             expdbzed[i][j] = exp(-dbzed[i][j] / rt);
@@ -409,6 +422,7 @@ int main(int argc, char* argv[])
     free(best_bzenergy);
     free(bzindex);
     free(best_antisyn);
+    free(flat_dbzed);
     free(tempstr);
     delta_linking_destroy();
     return 0;
@@ -468,6 +482,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     time(&begintime);
     for (i = 0; i < seqlength; i++) {
         assign_bzenergy_index(nucleotides, sequence + i);
+        flatten_dbzed(todin, bzindex, flat_dbzed);
         bestdl = 50.0;
         for (din = fromdin; din <= todin; din++) {
             best_esum = initesum;
