@@ -6,6 +6,6 @@ cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required : false)
 
 executable('zhunt',
-           sources: [ 'src/zhunt3.c', 'src/delta_linking.c' ],
+           sources: [ 'src/zhunt3.c', 'src/antisyn.c', 'src/delta_linking.c' ],
            dependencies: [ m_dep ],
            install : true)

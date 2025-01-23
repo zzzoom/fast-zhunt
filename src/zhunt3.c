@@ -22,6 +22,7 @@ The EMBO Journal, Vol.5, No.10, pp2737-2744, 1986
 With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 */
 
+#include "antisyn.h"
 #include "delta_linking.h"
 
 #include <error.h>
@@ -39,25 +40,6 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 #include <sys/types.h>
 #endif
 
-/* Delta BZ Energy of Dinucleotide */
-static const double dbzed[4][16] = {
-    /* AS-AS */
-    { 4.40, 6.20, 3.40, 5.20, 2.50, 4.40, 1.40, 3.30, 3.30, 5.20, 2.40, 4.20, 1.40, 3.40, 0.66, 2.40 },
-    /* AS-SA */
-    { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
-    /* SA-AS */
-    { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 },
-    /* SA-SA */
-    { 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 }
-};
-static double expdbzed[4][16]; /* exp(-dbzed/rt) */
-static double* flat_dbzed;
-static int flat_dbzed_stride;
-static int* bzindex; /* dinucleotides */
-
-static double *bzenergy, *best_bzenergy; /* dinucleotides */
-static double best_esum; /* assigned before call to anti_syn_energy() */
-static char* best_antisyn; /* nucleotides */
 
 char *tempstr, *sequence;
 #ifdef USE_MMAP
@@ -69,190 +51,8 @@ static double assign_probability(double dl);
 static void analyze_zscore(char* filename);
 static void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename);
 
-static void best_anti_syn(char* antisyn, int dinucleotides, double esum);
-static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum);
-
 static FILE* open_file(int mode, char* filename, char* typestr);
-static void assign_bzenergy_index(int nucleotides, char seq[]);
 static unsigned input_sequence(FILE* file, int nucleotides, int showfile);
-
-static void assign_bzenergy_index(int nucleotides, char seq[])
-{
-    int i, j, idx;
-    i = j = 0;
-    do {
-        char c1 = seq[i++];
-        char c2 = seq[i++];
-        switch (c1) {
-        case 'a':
-            switch (c2) {
-            case 'a':
-                idx = 0;
-                break;
-            case 't':
-                idx = 1;
-                break;
-            case 'g':
-                idx = 2;
-                break;
-            case 'c':
-                idx = 3;
-            }
-            break;
-        case 't':
-            switch (c2) {
-            case 'a':
-                idx = 4;
-                break;
-            case 't':
-                idx = 5;
-                break;
-            case 'g':
-                idx = 6;
-                break;
-            case 'c':
-                idx = 7;
-            }
-            break;
-        case 'g':
-            switch (c2) {
-            case 'a':
-                idx = 8;
-                break;
-            case 't':
-                idx = 9;
-                break;
-            case 'g':
-                idx = 10;
-                break;
-            case 'c':
-                idx = 11;
-            }
-            break;
-        case 'c':
-            switch (c2) {
-            case 'a':
-                idx = 12;
-                break;
-            case 't':
-                idx = 13;
-                break;
-            case 'g':
-                idx = 14;
-                break;
-            case 'c':
-                idx = 15;
-            }
-        }
-        bzindex[j++] = idx;
-    } while (i < nucleotides);
-}
-
-static void antisyn_string_bzenergy(const char* antisyn_string, int dinucleotides, double* bzenergy)
-{
-    if (dinucleotides == 0) {
-        return;
-    }
-
-    int i = antisyn_string[0] == 'A' ? 0 : 3;
-    bzenergy[0] = expdbzed[i][bzindex[0]];
-    for (int din = 1; din < dinucleotides; ++din) {
-        if (antisyn_string[2*din] == 'A') {
-            i = (antisyn_string[2*din - 2] == 'A') ? 0 : 2;
-        } else if (antisyn_string[2*din] == 'S') {
-            i = (antisyn_string[2*din - 2] == 'S') ? 3 : 1;
-        } else {
-            error(1, 1, "antisyn_string_bzenergy: shouldn't be here");
-        }
-        bzenergy[din] = expdbzed[i][bzindex[din]];
-    }
-}
-
-static void calculate_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy)
-{
-    if (dinucleotides == 0) {
-        return;
-    }
-
-    int i = antisyn[0] == 0 ? 0 : 3;
-    bzenergy[0] = expdbzed[i][bzindex[0]];
-    for (int din = 1; din < dinucleotides; ++din) {
-        if (antisyn[din] == 0) {
-            i = (antisyn[din - 1] == 0) ? 0 : 2;
-        } else if (antisyn[din] == 1) {
-            i = (antisyn[din - 1] == 1) ? 3 : 1;
-        } else {
-            error(1, 1, "calculate_bzenergy: shouldn't be here");
-        }
-        bzenergy[din] = expdbzed[i][bzindex[din]];
-    }
-}
-
-static void antisyn_string(const char* antisyn, int dinucleotides, char* dest)
-{
-    for (int din = 0; din < dinucleotides; ++din) {
-        if (antisyn[din] == 0) {
-            dest[2 * din] = 'A';
-            dest[2 * din + 1] = 'S';
-        } else {
-            dest[2 * din] = 'S';
-            dest[2 * din + 1] = 'A';
-        }
-    }
-    dest[2 * dinucleotides] = '\0';
-}
-
-static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
-{
-    if (esum < best_esum) {
-        best_esum = esum;
-        antisyn_string(antisyn, dinucleotides, best_antisyn);
-    }
-}
-
-static void flatten_dbzed(int dinucleotides, const int* bzindex, double* flat_dbzed) {
-    for (int i = 0; i < 4; ++i) {
-        for (int din = 0; din < dinucleotides; ++din) {
-            flat_dbzed[i * dinucleotides + din] = dbzed[i][bzindex[din]];
-        }
-    }
-    flat_dbzed_stride = dinucleotides;
-}
-
-static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum)
-{
-    antisyn[din] = 0;
-    int i1 = (din == 0) ? 0 : ((antisyn[din - 1] == 0) ? 0 : 2);
-    /*
-    if (din > 0) {
-      printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i1);
-    }
-    */
-    // double e1 = dbzed[i1][bzindex[din]];
-    double e1 = flat_dbzed[i1 * flat_dbzed_stride + din];
-
-    if (din + 1 == dinucleotides) {
-        best_anti_syn(antisyn, dinucleotides, esum + e1);
-    } else {
-        anti_syn_energy(antisyn, din + 1, dinucleotides, esum + e1);
-    }
-
-    antisyn[din] = 1;
-    int i2 = (din == 0) ? 3 : ((antisyn[din - 1] == 1) ? 3 : 1);
-    /*
-    if (din > 0) {
-      printf("%c%c-%c%c %d\n", antisyn[nucleotides-2], antisyn[nucleotides-1], antisyn[nucleotides], antisyn[nucleotides+1], i2);
-    }
-    */
-    // double e2 = dbzed[i2][bzindex[din]];
-    double e2 = flat_dbzed[i2 * flat_dbzed_stride + din];
-
-    if (din + 1 == dinucleotides) {
-        best_anti_syn(antisyn, dinucleotides, esum + e2);
-    } else {
-        anti_syn_energy(antisyn, din + 1, dinucleotides, esum + e2);
-    }
-}
 
 static FILE* open_file(int mode, char* filename, char* typestr)
 {
@@ -381,7 +181,6 @@ static double assign_probability(double dl)
 int main(int argc, char* argv[])
 {
     static double a = 0.357;
-    static double rt = 0.59004; /* 0.00198*298 */
 
     int i, j, nucleotides, dinucleotides;
     int min, max;
@@ -403,26 +202,11 @@ int main(int argc, char* argv[])
 
     delta_linking_init(dinucleotides);
 
-    best_antisyn = (char*)malloc(nucleotides + 1);
-
-    bzindex = (int*)calloc(dinucleotides, sizeof(int));
-    best_bzenergy = (double*)calloc(dinucleotides, sizeof(double));
-
-    flat_dbzed = (double*) calloc(4 * dinucleotides, sizeof(double));
-
-    for (i = 0; i < 4; i++)
-        for (j = 0; j < 16; j++)
-            expdbzed[i][j] = exp(-dbzed[i][j] / rt);
-
     calculate_zscore(a, dinucleotides, min, max, (char*)argv[4]);
 #ifndef PROB_ONLY
     analyze_zscore((char*)argv[4]);
 #endif
 
-    free(best_bzenergy);
-    free(bzindex);
-    free(best_antisyn);
-    free(flat_dbzed);
     free(tempstr);
     delta_linking_destroy();
     return 0;
@@ -431,8 +215,6 @@ int main(int argc, char* argv[])
 static void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename)
 {
     static double pideg = 57.29577951; /* 180/pi */
-    char* bestantisyn;
-    FILE* file;
     unsigned seqlength, i;
     int fromdin, todin, din, nucleotides;
     long begintime, endtime;
@@ -443,7 +225,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     todin = max;
     printf("calculating zscore\n");
 
-    file = open_file(1, filename, "");
+    FILE* file = open_file(1, filename, "");
     if (file == NULL) {
         printf("couldn't open %s!\n", filename);
         return;
@@ -476,23 +258,22 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
 
     a /= 2.0;
     initesum = 10.0 * todin;
-    bestantisyn = (char*)malloc(nucleotides + 1);
+    char* bestantisyn = (char*)malloc(nucleotides + 1);
     char* antisyn = (char*)malloc(nucleotides + 1);
+    double* best_bzenergy = (double*)malloc(todin * sizeof(double));
+    antisyn_init(todin);
 
     time(&begintime);
     for (i = 0; i < seqlength; i++) {
         assign_bzenergy_index(nucleotides, sequence + i);
-        flatten_dbzed(todin, bzindex, flat_dbzed);
         bestdl = 50.0;
         for (din = fromdin; din <= todin; din++) {
-            best_esum = initesum;
-            antisyn[2 * din] = 0;
-            anti_syn_energy(antisyn, 0, din, 0.0); /* esum = 0.0 */
-            antisyn_string_bzenergy(best_antisyn, din, best_bzenergy);
+            anti_syn_energy(din, initesum, antisyn, best_bzenergy); /* esum = 0.0 */
+
             dl = find_delta_linking(din, a * (double)din, best_bzenergy);
             if (dl < bestdl) {
                 bestdl = dl;
-                strcpy(bestantisyn, best_antisyn);
+                strncpy(bestantisyn, antisyn, nucleotides+1);
             }
         }
 #ifndef PROB_ONLY
@@ -507,8 +288,10 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     }
     time(&endtime);
 
+    free(best_bzenergy);
     free(bestantisyn);
     free(antisyn);
+    antisyn_destroy();
     fclose(file);
     printf("\n run time=%ld sec\n", endtime - begintime);
 #ifndef USE_MMAP
