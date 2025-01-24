@@ -1,5 +1,6 @@
 #include <error.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -158,7 +159,9 @@ static void antisyn_bzenergy(const char* antisyn, int dinucleotides, double* bze
         } else if (antisyn[din] == 1) {
             i = (antisyn[din - 1] == 1) ? 3 : 1;
         } else {
-            error(1, 1, "calculate_bzenergy: shouldn't be here");
+            fprintf(stderr, "din: %d, total: %d, as: %d\n", din, dinucleotides, antisyn[din]);
+            fflush(stderr);
+            error(1, 1, "antisyn_bzenergy: shouldn't be here");
         }
         bzenergy[din] = expdbzed[i][bzindex[din]];
     }
@@ -186,6 +189,76 @@ static void best_anti_syn(const char *antisyn, int dinucleotides, double esum)
     }
 }
 
+
+#define ANTISYN_BATCH_COMPARABLE_RESULTS
+#define ANTISYN_BATCH_ROUNDS 4
+#define ANTISYN_BATCH_SIZE (1 << ANTISYN_BATCH_ROUNDS)
+#define ANTISYN_BATCH_MASK (ANTISYN_BATCH_SIZE - 1)
+static double batch_dbzed[ANTISYN_BATCH_ROUNDS][ANTISYN_BATCH_SIZE];
+
+// Run the last 2^ANTISYN_BATCH_SIZE elements together instead of recursively
+// in order to vectorize operations
+// Compile with aggresive vectorization to get gains (-O3 -march=native)
+static void anti_syn_energy_batch(char* antisyn, double esum, int din, int dinucleotides)
+{
+    if (din + ANTISYN_BATCH_ROUNDS != dinucleotides) {
+        error(1, 1, "anti_syn_energy_batch: wrong depth");
+    }
+
+    // Calculate indices and gather dbzeds into batch_dbzed
+    int antisyn_prev = antisyn[din - 1];
+    int antisyn_prev_bits = antisyn_prev << ANTISYN_BATCH_ROUNDS;
+    for (int round = 0; round < ANTISYN_BATCH_ROUNDS; ++round) {
+        for (int antisyn_index = 0; antisyn_index < ANTISYN_BATCH_SIZE; ++antisyn_index)
+        {
+            int antisyn_bits = antisyn_prev_bits + antisyn_index;
+            int bzidx = (antisyn_bits >> (ANTISYN_BATCH_ROUNDS - round - 1)) & 0x3;
+            batch_dbzed[round][antisyn_index] = dbzed[bzidx][bzindex[din+round]];
+        }
+    }
+
+    #ifdef ANTISYN_BATCH_COMPARABLE_RESULTS
+    // Accumulate (((esum + batch[0]) + ...) + batch[n]) as original
+    for (int antisyn_index = 0; antisyn_index < ANTISYN_BATCH_SIZE; ++antisyn_index) {
+        batch_dbzed[0][antisyn_index] += esum;
+    }
+    #endif
+
+    // Easy to vectorize per-lane esum reduction
+    for (int round = 1; round < ANTISYN_BATCH_ROUNDS; ++round) {
+        for (int antisyn_index = 0; antisyn_index < ANTISYN_BATCH_SIZE; ++antisyn_index) {
+            batch_dbzed[0][antisyn_index] += batch_dbzed[round][antisyn_index];
+        }
+    }
+
+    // Find minimum esum in batch
+    double min_esum = batch_dbzed[0][0];
+    int min_index = 0;
+    for (int antisyn_index = 0; antisyn_index < ANTISYN_BATCH_SIZE; ++antisyn_index) {
+        if (batch_dbzed[0][antisyn_index] < min_esum) {
+            min_esum = batch_dbzed[0][antisyn_index];
+            min_index = antisyn_index;
+        }
+    }
+
+    #ifdef ANTISYN_BATCH_COMPARABLE_RESULTS
+    double best_batch_esum = min_esum;
+    #else
+    // Accumulate esum + (((batch[0] + batch[1]) + ...) + batch[n])
+    double best_batch_esum = esum + min_esum;
+    #endif
+
+    if (best_batch_esum < g_best.esum) {
+        g_best.esum = best_batch_esum;
+        for (int i = 0; i < din; ++i) {
+            g_best.antisyn[i] = antisyn[i];
+        }
+        for (int i = 0; i < ANTISYN_BATCH_ROUNDS; ++i) {
+            g_best.antisyn[din + i] = (min_index >> (ANTISYN_BATCH_ROUNDS - i - 1)) & 0x1;
+        }
+    }
+}
+
 static void anti_syn_energy_rec(char* antisyn, double esum, int din, int dinucleotides)
 {
     antisyn[din] = 0;
@@ -195,6 +268,8 @@ static void anti_syn_energy_rec(char* antisyn, double esum, int din, int dinucle
 
     if (din + 1 == dinucleotides) {
         best_anti_syn(antisyn, dinucleotides, esum0);
+    } else if (din + 1 + ANTISYN_BATCH_ROUNDS == dinucleotides) {
+        anti_syn_energy_batch(antisyn, esum0, din + 1, dinucleotides);
     } else {
         anti_syn_energy_rec(antisyn, esum0, din + 1, dinucleotides);
     }
@@ -203,10 +278,11 @@ static void anti_syn_energy_rec(char* antisyn, double esum, int din, int dinucle
     int i1 = (din == 0) ? 3 : ((antisyn[din - 1] == 1) ? 3 : 1);
     double e1 = dbzed[i1][bzindex[din]];
     double esum1 = esum + e1;
-
     
     if (din + 1 == dinucleotides) {
         best_anti_syn(antisyn, dinucleotides, esum1);
+    } else if (din + 1 + ANTISYN_BATCH_ROUNDS == dinucleotides) {
+        anti_syn_energy_batch(antisyn, esum1, din + 1, dinucleotides);
     } else {
         anti_syn_energy_rec(antisyn, esum1, din + 1, dinucleotides);
     }
