@@ -27,6 +27,9 @@ typedef struct {
 
 Candidate g_best;
 Candidate g_scratch;
+Candidate g_best0;
+Candidate g_best0_prev;
+Candidate g_best1;
 
 void antisyn_init(int dinucleotides)
 {
@@ -34,6 +37,10 @@ void antisyn_init(int dinucleotides)
 
     g_best.antisyn = (char*)malloc(2 * dinucleotides + 1);
     g_scratch.antisyn = (char*)malloc(2 * dinucleotides + 1);
+
+    g_best0.antisyn = (char*)malloc(2 * dinucleotides + 1);
+    g_best0_prev.antisyn = (char*)malloc(2 * dinucleotides + 1);
+    g_best1.antisyn = (char*)malloc(2 * dinucleotides + 1);
 
     bzindex = (int*)calloc(dinucleotides, sizeof(int));
 
@@ -47,6 +54,9 @@ void antisyn_init(int dinucleotides)
 void antisyn_destroy(void)
 {
     free(g_best.antisyn);
+    free(g_best0.antisyn);
+    free(g_best0_prev.antisyn);
+    free(g_best1.antisyn);
     free(g_scratch.antisyn);
     free(bzindex);
     // free(best_bzenergy);
@@ -278,7 +288,7 @@ static void anti_syn_energy_rec(char* antisyn, double esum, int din, int dinucle
     int i1 = (din == 0) ? 3 : ((antisyn[din - 1] == 1) ? 3 : 1);
     double e1 = dbzed[i1][bzindex[din]];
     double esum1 = esum + e1;
-    
+
     if (din + 1 == dinucleotides) {
         best_anti_syn(antisyn, dinucleotides, esum1);
     } else if (din + 1 + ANTISYN_BATCH_ROUNDS == dinucleotides) {
@@ -288,6 +298,7 @@ static void anti_syn_energy_rec(char* antisyn, double esum, int din, int dinucle
     }
 }
 
+/*
 void anti_syn_energy(int dinucleotides, double max_esum, char* antisyn_out, double* bzenergy_out)
 {
     g_best.esum = max_esum;
@@ -295,4 +306,52 @@ void anti_syn_energy(int dinucleotides, double max_esum, char* antisyn_out, doub
 
     antisyn_string(g_best.antisyn, dinucleotides, antisyn_out);
     antisyn_bzenergy(g_best.antisyn, dinucleotides, bzenergy_out);
+}
+*/
+
+void anti_syn_energy(int dinucleotides, double max_esum, char* antisyn_out, double* bzenergy_out)
+{
+    g_best0.esum = dbzed[0][bzindex[0]];
+    g_best0.antisyn[0] = 0;
+
+    g_best1.esum = dbzed[3][bzindex[0]];
+    g_best1.antisyn[0] = 1;
+
+    for (int din = 1; din < dinucleotides; ++din) {
+        const double dbzed00 = dbzed[0][bzindex[din]];
+        const double dbzed01 = dbzed[1][bzindex[din]];
+        const double dbzed10 = dbzed[2][bzindex[din]];
+        const double dbzed11 = dbzed[3][bzindex[din]];
+
+        const double prev_best0 = g_best0.esum;
+        const double prev_best1 = g_best1.esum;
+        memcpy(g_best0_prev.antisyn, g_best0.antisyn, din);
+
+        if (prev_best0 + dbzed00 <= prev_best1 + dbzed10) {
+            g_best0.esum = prev_best0 + dbzed00;
+        } else {
+            g_best0.esum = prev_best1 + dbzed10;
+            memcpy(g_best0.antisyn, g_best1.antisyn, din);
+        }
+        g_best0.antisyn[din] = 0;
+
+        // < is slower but it preserves the original order
+        if (prev_best1 + dbzed11 < prev_best0 + dbzed01) {
+            g_best1.esum = prev_best1 + dbzed11;
+        } else {
+            g_best1.esum = prev_best0 + dbzed01;
+            memcpy(g_best1.antisyn, g_best0_prev.antisyn, din);
+        }
+        g_best1.antisyn[din] = 1;
+    }
+
+    if (g_best0.esum <= g_best1.esum) {
+        g_best.esum = g_best0.esum;
+        antisyn_string(g_best0.antisyn, dinucleotides, antisyn_out);
+        antisyn_bzenergy(g_best0.antisyn, dinucleotides, bzenergy_out);
+    } else {
+        g_best.esum = g_best1.esum;
+        antisyn_string(g_best1.antisyn, dinucleotides, antisyn_out);
+        antisyn_bzenergy(g_best1.antisyn, dinucleotides, bzenergy_out);
+    }
 }
