@@ -24,6 +24,7 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 
 #include <error.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -143,13 +144,25 @@ static const double dbzed[4][16] = {
   { 6.20, 6.20, 5.20, 5.20, 6.20, 6.20, 5.20, 5.20, 5.20, 5.20, 4.00, 4.00, 5.20, 5.20, 4.00, 4.00 }
 };
 
+static const int int_dbzed[4][16] = {
+    /* AS-AS */
+    { 440, 620, 340, 520, 250, 440, 140, 330, 330, 520, 240, 420, 140, 340, 66, 240 },
+    /* SA-SA */
+    { 440, 250, 330, 140, 620, 440, 520, 340, 340, 140, 240, 66, 520, 330, 420, 240 },
+    /* AS-SA */
+    { 620, 620, 520, 520, 620, 620, 520, 520, 520, 520, 400, 400, 520, 520, 400, 400 },
+    /* SA-AS */
+    { 620, 620, 520, 520, 620, 620, 520, 520, 520, 520, 400, 400, 520, 520, 400, 400 }
+};
+typedef int64_t esum_t;
+
 static double expdbzed[4][16];                 /* exp(-dbzed/rt) */
 static int    *bzindex;                        /* dinucleotides */
 
 
 
-static void best_anti_syn(char* antisyn, int dinucleotides, double esum);
-static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum);
+static void best_anti_syn(char* antisyn, int dinucleotides, esum_t esum);
+static void anti_syn_energy(char* antisyn, int din, int dinucleotides, esum_t esum);
 
 int      user_regret( void );
 FILE     *open_file( int mode, char *filename, char *typestr );
@@ -209,11 +222,11 @@ void assign_bzenergy_index( int nucleotides, char seq[] )
 
 
 double *bzenergy, *best_bzenergy;       /* dinucleotides */
-double  best_esum;               /* assigned before call to anti_syn_energy() */
+esum_t best_esum;               /* assigned before call to anti_syn_energy() */
 char   *best_antisyn;         /* nucleotides */
 
 
-static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
+static void best_anti_syn(char* antisyn, int dinucleotides, esum_t esum)
 {
   if (esum < best_esum) {
     best_esum = esum;
@@ -234,14 +247,14 @@ static void best_anti_syn(char* antisyn, int dinucleotides, double esum)
 }
 
 
-static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double esum)
+static void anti_syn_energy(char* antisyn, int din, int dinucleotides, esum_t esum)
 {
   int nucleotides = 2 * din;
 
   antisyn[nucleotides] = 'A';
   antisyn[nucleotides+1] = 'S';
   int i1 = (din == 0) ? 0 : ((antisyn[nucleotides-1] == 'S') ? 0 : 3);
-  double e1 = dbzed[i1][bzindex[din]];
+  esum_t e1 = int_dbzed[i1][bzindex[din]];
 
   if (din+1 == dinucleotides) {
     best_anti_syn(antisyn, dinucleotides, esum + e1);
@@ -252,7 +265,7 @@ static void anti_syn_energy(char* antisyn, int din, int dinucleotides, double es
   antisyn[nucleotides] = 'S';
   antisyn[nucleotides+1] = 'A';
   int i2 = (din == 0) ? 1 : ((antisyn[nucleotides-1] == 'A') ? 1 : 2);
-  double e2 = dbzed[i2][bzindex[din]];
+  esum_t e2 = int_dbzed[i2][bzindex[din]];
 
   if (din+1 == dinucleotides) {
     best_anti_syn(antisyn, dinucleotides, esum + e2);
@@ -552,7 +565,7 @@ void calculate_zscore( double a, int maxdinucleotides, int min, int max, char *f
   int      fromdin, todin, din, nucleotides;
   long     begintime, endtime;
   double   dl, slope, probability, bestdl;
-  float    initesum;
+  esum_t initesum;
 
   fromdin = min;
   todin = max;
@@ -594,7 +607,8 @@ void calculate_zscore( double a, int maxdinucleotides, int min, int max, char *f
 #endif
 
   a /= 2.0;
-  initesum = 10.0 * todin;
+  // initesum = 10.0 * todin;
+  initesum = 1000 * todin;
   bestantisyn = (char *) malloc( nucleotides+1 );
   char* antisyn = (char *) malloc( nucleotides+1 );
 
@@ -609,7 +623,7 @@ void calculate_zscore( double a, int maxdinucleotides, int min, int max, char *f
           best_esum = initesum;
           deltatwist = a * (double)din;
           antisyn[2*din] = 0;
-          anti_syn_energy(antisyn, 0, din, 0.0 );           /* esum = 0.0 */
+          anti_syn_energy(antisyn, 0, din, 0 );           /* esum = 0.0 */
           dl = find_delta_linking( din );
           if( dl < bestdl )
             {
@@ -779,7 +793,7 @@ void run_distribution( double a, int maxdinucleotides, FILE *disfile )
 {
   int    i, nucleotides, dinucleotides, levels;
   long   begintime, endtime, repeat, k, *distribution;
-  double  initesum;
+  esum_t initesum;
   double dl, sumdl, sumdldl, dlaverage, dlstdv, dlfrom, dlto, dlstep;
 
   printf( "\n Window size (dinucleotides) and sample size: " );
@@ -798,7 +812,8 @@ void run_distribution( double a, int maxdinucleotides, FILE *disfile )
   sequence = (char *) malloc( nucleotides );
                                    /* half of the window convert from B to Z */
   deltatwist = a * (double)dinucleotides / 2.0;
-  initesum = 10.0 * dinucleotides;      /* for best_anti_syn() use */
+  // initesum = 10.0 * dinucleotides;      /* for best_anti_syn() use */
+  initesum = 1000 * dinucleotides;      /* for best_anti_syn() use */
 
   levels = (dlto - dlfrom) / dlstep + 1;
   distribution = (long *) calloc( levels, sizeof(long) );
