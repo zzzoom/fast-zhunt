@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int* bzindex; /* dinucleotides */
+
 /* Delta BZ Energy of Dinucleotide */
 static const double dbzed[4][16] = {
     /* AS-AS */
@@ -27,11 +29,8 @@ static const int int_dbzed[4][16] = {
     { 440, 250, 330, 140, 620, 440, 520, 340, 340, 140, 240, 66, 520, 330, 420, 240 }
 };
 static double expdbzed[4][16]; /* exp(-dbzed/rt) */
+
 typedef int64_t esum_t;
-
-static int* bzindex; /* dinucleotides */
-
-// static double *bzenergy, *best_bzenergy; /* dinucleotides */
 typedef struct {
     esum_t esum;
     char* antisyn;
@@ -341,19 +340,23 @@ void anti_syn_energy(int dinucleotides, double max_esum, char* antisyn_out, doub
         const esum_t prev_best1 = g_best1.esum;
         memcpy(g_best0_prev.antisyn, g_best0.antisyn, din);
 
-        if (prev_best0 + dbzed00 <= prev_best1 + dbzed10) {
-            g_best0.esum = prev_best0 + dbzed00;
+        esum_t esum00 = prev_best0 + dbzed00;
+        esum_t esum10 = prev_best1 + dbzed10;
+        // relatively expensive comparison to preserve comparable results
+        if ((esum00 < esum10) || ((esum00 == esum10) && (strncmp(g_best0.antisyn, g_best1.antisyn, din) <= 0))) {
+            g_best0.esum = esum00;
         } else {
-            g_best0.esum = prev_best1 + dbzed10;
+            g_best0.esum = esum10;
             memcpy(g_best0.antisyn, g_best1.antisyn, din);
         }
         g_best0.antisyn[din] = 0;
 
-        // < is slower but it preserves the original order
-        if (prev_best1 + dbzed11 < prev_best0 + dbzed01) {
-            g_best1.esum = prev_best1 + dbzed11;
+        esum_t esum01 = prev_best0 + dbzed01;
+        esum_t esum11 = prev_best1 + dbzed11;
+        if ((esum11 < esum01) || ((esum11 == esum01) && (strncmp(g_best1.antisyn, g_best0.antisyn, din) < 0))) {
+            g_best1.esum = esum11;
         } else {
-            g_best1.esum = prev_best0 + dbzed01;
+            g_best1.esum = esum01;
             memcpy(g_best1.antisyn, g_best0_prev.antisyn, din);
         }
         g_best1.antisyn[din] = 1;
