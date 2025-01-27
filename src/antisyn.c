@@ -1,5 +1,6 @@
 #include <error.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,13 +16,24 @@ static const double dbzed[4][16] = {
     /* SA-SA */
     { 4.40, 2.50, 3.30, 1.40, 6.20, 4.40, 5.20, 3.40, 3.40, 1.40, 2.40, 0.66, 5.20, 3.30, 4.20, 2.40 }
 };
+static const int int_dbzed[4][16] = {
+    /* AS-AS */
+    { 440, 620, 340, 520, 250, 440, 140, 330, 330, 520, 240, 420, 140, 340, 66, 240 },
+    /* AS-SA */
+    { 620, 620, 520, 520, 620, 620, 520, 520, 520, 520, 400, 400, 520, 520, 400, 400 },
+    /* SA-AS */
+    { 620, 620, 520, 520, 620, 620, 520, 520, 520, 520, 400, 400, 520, 520, 400, 400 },
+    /* SA-SA */
+    { 440, 250, 330, 140, 620, 440, 520, 340, 340, 140, 240, 66, 520, 330, 420, 240 }
+};
 static double expdbzed[4][16]; /* exp(-dbzed/rt) */
+typedef int64_t esum_t;
 
 static int* bzindex; /* dinucleotides */
 
 // static double *bzenergy, *best_bzenergy; /* dinucleotides */
 typedef struct {
-    double esum;
+    esum_t esum;
     char* antisyn;
 } Candidate;
 
@@ -64,8 +76,9 @@ void antisyn_destroy(void)
 
 void assign_bzenergy_index(int nucleotides, char seq[])
 {
-    int i, j, idx;
-    i = j = 0;
+    int i = 0;
+    int j = 0;
+    int idx = 0;
     do {
         char c1 = seq[i++];
         char c2 = seq[i++];
@@ -191,7 +204,7 @@ static void antisyn_string(const char* antisyn, int dinucleotides, char* dest)
     dest[2 * dinucleotides] = '\0';
 }
 
-static void best_anti_syn(const char *antisyn, int dinucleotides, double esum)
+static void best_anti_syn(const char *antisyn, int dinucleotides, esum_t esum)
 {
     if (esum < g_best.esum) {
         g_best.esum = esum;
@@ -199,7 +212,7 @@ static void best_anti_syn(const char *antisyn, int dinucleotides, double esum)
     }
 }
 
-
+/*
 #define ANTISYN_BATCH_COMPARABLE_RESULTS
 #define ANTISYN_BATCH_ROUNDS 4
 #define ANTISYN_BATCH_SIZE (1 << ANTISYN_BATCH_ROUNDS)
@@ -297,6 +310,7 @@ static void anti_syn_energy_rec(char* antisyn, double esum, int din, int dinucle
         anti_syn_energy_rec(antisyn, esum1, din + 1, dinucleotides);
     }
 }
+*/
 
 /*
 void anti_syn_energy(int dinucleotides, double max_esum, char* antisyn_out, double* bzenergy_out)
@@ -311,20 +325,20 @@ void anti_syn_energy(int dinucleotides, double max_esum, char* antisyn_out, doub
 
 void anti_syn_energy(int dinucleotides, double max_esum, char* antisyn_out, double* bzenergy_out)
 {
-    g_best0.esum = dbzed[0][bzindex[0]];
+    g_best0.esum = int_dbzed[0][bzindex[0]];
     g_best0.antisyn[0] = 0;
 
-    g_best1.esum = dbzed[3][bzindex[0]];
+    g_best1.esum = int_dbzed[3][bzindex[0]];
     g_best1.antisyn[0] = 1;
 
     for (int din = 1; din < dinucleotides; ++din) {
-        const double dbzed00 = dbzed[0][bzindex[din]];
-        const double dbzed01 = dbzed[1][bzindex[din]];
-        const double dbzed10 = dbzed[2][bzindex[din]];
-        const double dbzed11 = dbzed[3][bzindex[din]];
+        const esum_t dbzed00 = int_dbzed[0][bzindex[din]];
+        const esum_t dbzed01 = int_dbzed[1][bzindex[din]];
+        const esum_t dbzed10 = int_dbzed[2][bzindex[din]];
+        const esum_t dbzed11 = int_dbzed[3][bzindex[din]];
 
-        const double prev_best0 = g_best0.esum;
-        const double prev_best1 = g_best1.esum;
+        const esum_t prev_best0 = g_best0.esum;
+        const esum_t prev_best1 = g_best1.esum;
         memcpy(g_best0_prev.antisyn, g_best0.antisyn, din);
 
         if (prev_best0 + dbzed00 <= prev_best1 + dbzed10) {
