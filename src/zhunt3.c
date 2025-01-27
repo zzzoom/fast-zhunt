@@ -40,7 +40,6 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 #include <sys/types.h>
 #endif
 
-
 char *tempstr, *sequence;
 #ifdef USE_MMAP
 int sequencefile;
@@ -273,7 +272,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
             dl = find_delta_linking(din, a * (double)din, best_bzenergy);
             if (dl < bestdl) {
                 bestdl = dl;
-                strncpy(bestantisyn, antisyn, nucleotides+1);
+                strncpy(bestantisyn, antisyn, nucleotides + 1);
             }
         }
 #ifndef PROB_ONLY

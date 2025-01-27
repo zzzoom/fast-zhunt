@@ -1,11 +1,11 @@
 #include "delta_linking.h"
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 
 int terms;
 static double *bztwist, *logcoef, *exponent;
-static double *bzenergy_scratch;
+static double* bzenergy_scratch;
 static const double _k_rt = -0.2521201; /* -1100/4363 */
 static const double sigma = 16.94800353; /* 10/RT */
 static double deltatwist;

@@ -146,7 +146,6 @@ void assign_bzenergy_index(int nucleotides, char seq[])
     } while (i < nucleotides);
 }
 
-
 static void antisyn_string_bzenergy(const char* antisyn_string, int dinucleotides, double* bzenergy)
 {
     if (dinucleotides == 0) {
@@ -156,10 +155,10 @@ static void antisyn_string_bzenergy(const char* antisyn_string, int dinucleotide
     int i = antisyn_string[0] == 'A' ? 0 : 3;
     bzenergy[0] = expdbzed[i][bzindex[0]];
     for (int din = 1; din < dinucleotides; ++din) {
-        if (antisyn_string[2*din] == 'A') {
-            i = (antisyn_string[2*din - 2] == 'A') ? 0 : 2;
-        } else if (antisyn_string[2*din] == 'S') {
-            i = (antisyn_string[2*din - 2] == 'S') ? 3 : 1;
+        if (antisyn_string[2 * din] == 'A') {
+            i = (antisyn_string[2 * din - 2] == 'A') ? 0 : 2;
+        } else if (antisyn_string[2 * din] == 'S') {
+            i = (antisyn_string[2 * din - 2] == 'S') ? 3 : 1;
         } else {
             error(1, 1, "antisyn_string_bzenergy: shouldn't be here");
         }
@@ -203,7 +202,7 @@ static void antisyn_string(const char* antisyn, int dinucleotides, char* dest)
     dest[2 * dinucleotides] = '\0';
 }
 
-static void best_anti_syn(const char *antisyn, int dinucleotides, esum_t esum)
+static void best_anti_syn(const char* antisyn, int dinucleotides, esum_t esum)
 {
     if (esum < g_best.esum) {
         g_best.esum = esum;
