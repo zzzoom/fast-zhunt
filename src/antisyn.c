@@ -1,4 +1,3 @@
-#include <error.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -180,9 +179,8 @@ static void antisyn_bzenergy(const char* antisyn, int dinucleotides, double* bze
         } else if (antisyn[din] == 1) {
             i = (antisyn[din - 1] == 1) ? 3 : 1;
         } else {
-            fprintf(stderr, "din: %d, total: %d, as: %d\n", din, dinucleotides, antisyn[din]);
-            fflush(stderr);
-            error(1, 1, "antisyn_bzenergy: shouldn't be here");
+            fprintf(stderr, "antisyn_bzenergy: wrong value %d in antisyn\n", antisyn[din]);
+            exit(EXIT_FAILURE);
         }
         bzenergy[din] = expdbzed[i][bzindex[din]];
     }
@@ -194,9 +192,12 @@ static void antisyn_string(const char* antisyn, int dinucleotides, char* dest)
         if (antisyn[din] == 0) {
             dest[2 * din] = 'A';
             dest[2 * din + 1] = 'S';
-        } else {
+        } else if (antisyn[din] == 1) {
             dest[2 * din] = 'S';
             dest[2 * din + 1] = 'A';
+        } else {
+            fprintf(stderr, "antisyn_string: wrong value %d in antisyn\n", antisyn[din]);
+            exit(EXIT_FAILURE);
         }
     }
     dest[2 * dinucleotides] = '\0';

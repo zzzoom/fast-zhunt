@@ -25,7 +25,6 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 #include "antisyn.h"
 #include "delta_linking.h"
 
-#include <error.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
