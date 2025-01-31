@@ -2,7 +2,6 @@ FROM ubuntu
 FROM python:3.7-alpine
 
 ENV ZHUNT_HOME=/zhunt
-ARG GCC_OPTS="-lm"
 ARG REQUIREMENTS=requirements.txt
 
 RUN mkdir -p $ZHUNT_HOME/bin\
@@ -11,7 +10,7 @@ RUN mkdir -p $ZHUNT_HOME/bin\
 
 ENV FLASK_APP app.py
 ENV FLASK_RUN_HOST 0.0.0.0
-RUN apk add --no-cache gcc musl-dev linux-headers
+RUN apk add --no-cache gcc make musl-dev
 
 # python dependency installs
 COPY $REQUIREMENTS $ZHUNT_HOME/$REQUIREMENTS
@@ -25,8 +24,8 @@ ENV PATH $PATH:$ZHUNT_HOME/bin
 COPY test $ZHUNT_HOME/test
 COPY src $ZHUNT_HOME/src
 
-# compile zhunt with gcc
-RUN gcc $GCC_OPTS -o $ZHUNT_HOME/bin/zhunt $ZHUNT_HOME/src/zhunt3.c
+# compile zhunt
+RUN make -C $ZHUNT_HOME/src TARGET=$ZHUNT_HOME/bin/zhunt
 
 WORKDIR $ZHUNT_HOME
 
