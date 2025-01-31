@@ -217,7 +217,6 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     int fromdin, todin, din, nucleotides;
     long begintime, endtime;
     double dl, slope, probability, bestdl;
-    float initesum;
 
     fromdin = min;
     todin = max;
@@ -255,7 +254,6 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
 #endif
 
     a /= 2.0;
-    initesum = 10.0 * todin;
     char* bestantisyn = (char*)malloc(nucleotides + 1);
     char* antisyn = (char*)malloc(nucleotides + 1);
     double* best_bzenergy = (double*)malloc(todin * sizeof(double));
@@ -266,7 +264,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
         assign_bzenergy_index(nucleotides, sequence + i);
         bestdl = 50.0;
         for (din = fromdin; din <= todin; din++) {
-            anti_syn_energy(din, initesum, antisyn, best_bzenergy); /* esum = 0.0 */
+            anti_syn_energy(din, antisyn, best_bzenergy);
 
             dl = find_delta_linking(din, a * (double)din, best_bzenergy);
             if (dl < bestdl) {
