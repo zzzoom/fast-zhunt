@@ -261,6 +261,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
 
     time(&begintime);
     for (i = 0; i < seqlength; i++) {
+        printf("seqlength %d/%d\r", i, seqlength);
         assign_bzenergy_index(nucleotides, sequence + i);
         bestdl = 50.0;
         for (din = fromdin; din <= todin; din++) {
