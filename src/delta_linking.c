@@ -3,7 +3,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-int terms;
 static double *bztwist, *logcoef, *exponent;
 static double* bzenergy_scratch;
 static const double _k_rt = -0.2521201; /* -1100/4363 */
@@ -35,30 +34,10 @@ void delta_linking_destroy(void)
     free(bzenergy_scratch);
 }
 
-static double linear_search(double x1, double x2, double tole, double (*func)())
-{
-    double f = func(x1);
-    double fmid = func(x2);
-    if (f * fmid >= 0.0) {
-        return x2;
-    }
-
-    double dx, xmid;
-    double x = (f < 0.0) ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
-    do {
-        dx *= 0.5;
-        xmid = x + dx;
-        fmid = func(xmid);
-        if (fmid <= 0.0) {
-            x = xmid;
-        }
-    } while (fabs(dx) > tole);
-    return x;
-}
-
-static double delta_linking(double dl)
+static double delta_linking(double dl, int terms)
 {
     double expmini = 0.0;
+    #pragma omp simd reduction(min:expmini)
     for (int i = 0; i < terms; i++) {
         double z = dl - bztwist[i];
         exponent[i] = z = logcoef[i] + _k_rt * z * z;
@@ -69,6 +48,7 @@ static double delta_linking(double dl)
     expmini = (expmini < explimit) ? explimit - expmini : 0.0;
     double sump = 0.0;
     double sumq = 0.0;
+    #pragma omp simd reduction(+:sumq,sump)
     for (int i = 0; i < terms; i++) {
         double z = exp(exponent[i] + expmini);
         sumq += z;
@@ -78,7 +58,47 @@ static double delta_linking(double dl)
     return deltatwist - sump / sumq;
 }
 
-double delta_linking_slope(double dl)
+static double linear_search_dl(double x1, double x2, double tole, int terms)
+{
+    double f = delta_linking(x1, terms);
+    double fmid = delta_linking(x2, terms);
+    if (f * fmid >= 0.0) {
+        return x2;
+    }
+
+    double dx, xmid;
+    double x = (f < 0.0) ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
+    do {
+        dx *= 0.5;
+        xmid = x + dx;
+        fmid = delta_linking(xmid, terms);
+        if (fmid <= 0.0) {
+            x = xmid;
+        }
+    } while (fabs(dx) > tole);
+    return x;
+}
+
+double find_delta_linking(int dinucleotides, double dtwist, const double* best_bzenergy)
+{
+    double sum;
+    int i, j;
+
+    for (i = 0; i < dinucleotides; i++)
+        bzenergy_scratch[i] = 1.0;
+    for (i = 0; i < dinucleotides; i++) {
+        sum = 0.0;
+        for (j = 0; j < dinucleotides - i; j++) {
+            bzenergy_scratch[j] *= best_bzenergy[i + j];
+            sum += bzenergy_scratch[j];
+        }
+        logcoef[i] = log(sum);
+    }
+    deltatwist = dtwist;
+    return linear_search_dl(10.0, 50.0, 0.001, dinucleotides);
+}
+
+double delta_linking_slope(double dl, int terms)
 {
     double sump, sump1, sumq, sumq1, x, y, z;
 
@@ -107,23 +127,3 @@ double delta_linking_slope(double dl)
     sumq1 += x * dl * y;
     return (sump1 - sump * sumq1 / sumq) / sumq;
 } /* slope at delta linking = dl */
-
-double find_delta_linking(int dinucleotides, double dtwist, const double* best_bzenergy)
-{
-    double sum;
-    int i, j;
-
-    for (i = 0; i < dinucleotides; i++)
-        bzenergy_scratch[i] = 1.0;
-    for (i = 0; i < dinucleotides; i++) {
-        sum = 0.0;
-        for (j = 0; j < dinucleotides - i; j++) {
-            bzenergy_scratch[j] *= best_bzenergy[i + j];
-            sum += bzenergy_scratch[j];
-        }
-        logcoef[i] = log(sum);
-    }
-    terms = dinucleotides;
-    deltatwist = dtwist;
-    return linear_search(10.0, 50.0, 0.001, delta_linking);
-}

@@ -274,7 +274,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
             }
         }
 #ifndef PROB_ONLY
-        slope = atan(delta_linking_slope(bestdl)) * pideg;
+        slope = atan(delta_linking_slope(bestdl, todin)) * pideg;
 #endif
         probability = assign_probability(bestdl);
 #ifndef PROB_ONLY
