@@ -76,6 +76,23 @@ static double linear_search_dl(double x1, double x2, double tole, double deltatw
     return x;
 }
 
+void dl_logcoef(int dinucleotides, const double* best_bzenergy, double* logcoef)
+{
+    double bzenergy_scratch[dinucleotides];
+
+    for (int i = 0; i < dinucleotides; i++) {
+        bzenergy_scratch[i] = 1.0;
+    }
+    for (int i = 0; i < dinucleotides; i++) {
+        double sum = 0.0;
+        for (int j = 0; j < dinucleotides - i; j++) {
+            bzenergy_scratch[j] *= best_bzenergy[i + j];
+            sum += bzenergy_scratch[j];
+        }
+        logcoef[i] = log(sum);
+    }
+}
+
 double find_delta_linking(int dinucleotides, double dtwist, const double* best_bzenergy)
 {
     double sum;
