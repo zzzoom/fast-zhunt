@@ -3,8 +3,8 @@
 #include <math.h>
 #include <stdlib.h>
 
-static double *bztwist, *logcoef, *exponent;
-static double* bzenergy_scratch;
+static double *bztwist; // Read-only after init
+static double *logcoef, *exponent;
 static const double _k_rt = -0.2521201; /* -1100/4363 */
 static const double sigma = 16.94800353; /* 10/RT */
 static const double explimit = -600.0;
@@ -22,7 +22,6 @@ void delta_linking_init(int dinucleotides)
     }
     logcoef = (double*)calloc(dinucleotides, sizeof(double));
     exponent = (double*)calloc(dinucleotides, sizeof(double));
-    bzenergy_scratch = (double*)calloc(dinucleotides, sizeof(double));
 }
 
 void delta_linking_destroy(void)
@@ -30,7 +29,6 @@ void delta_linking_destroy(void)
     free(exponent);
     free(logcoef);
     free(bztwist);
-    free(bzenergy_scratch);
 }
 
 static double delta_linking(double dl, double deltatwist, int terms)
@@ -83,8 +81,11 @@ double find_delta_linking(int dinucleotides, double dtwist, const double* best_b
     double sum;
     int i, j;
 
-    for (i = 0; i < dinucleotides; i++)
+    double bzenergy_scratch[dinucleotides];
+
+    for (i = 0; i < dinucleotides; i++) {
         bzenergy_scratch[i] = 1.0;
+    }
     for (i = 0; i < dinucleotides; i++) {
         sum = 0.0;
         for (j = 0; j < dinucleotides - i; j++) {
