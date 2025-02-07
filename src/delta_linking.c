@@ -7,7 +7,6 @@ static double *bztwist, *logcoef, *exponent;
 static double* bzenergy_scratch;
 static const double _k_rt = -0.2521201; /* -1100/4363 */
 static const double sigma = 16.94800353; /* 10/RT */
-static double deltatwist;
 static const double explimit = -600.0;
 
 void delta_linking_init(int dinucleotides)
@@ -34,7 +33,7 @@ void delta_linking_destroy(void)
     free(bzenergy_scratch);
 }
 
-static double delta_linking(double dl, int terms)
+static double delta_linking(double dl, double deltatwist, int terms)
 {
     double expmini = 0.0;
     #pragma omp simd reduction(min:expmini)
@@ -58,10 +57,10 @@ static double delta_linking(double dl, int terms)
     return deltatwist - sump / sumq;
 }
 
-static double linear_search_dl(double x1, double x2, double tole, int terms)
+static double linear_search_dl(double x1, double x2, double tole, double deltatwist, int terms)
 {
-    double f = delta_linking(x1, terms);
-    double fmid = delta_linking(x2, terms);
+    double f = delta_linking(x1, deltatwist, terms);
+    double fmid = delta_linking(x2, deltatwist, terms);
     if (f * fmid >= 0.0) {
         return x2;
     }
@@ -71,7 +70,7 @@ static double linear_search_dl(double x1, double x2, double tole, int terms)
     do {
         dx *= 0.5;
         xmid = x + dx;
-        fmid = delta_linking(xmid, terms);
+        fmid = delta_linking(xmid, deltatwist, terms);
         if (fmid <= 0.0) {
             x = xmid;
         }
@@ -94,8 +93,7 @@ double find_delta_linking(int dinucleotides, double dtwist, const double* best_b
         }
         logcoef[i] = log(sum);
     }
-    deltatwist = dtwist;
-    return linear_search_dl(10.0, 50.0, 0.001, dinucleotides);
+    return linear_search_dl(10.0, 50.0, 0.001, dtwist, dinucleotides);
 }
 
 double delta_linking_slope(double dl, int terms)
