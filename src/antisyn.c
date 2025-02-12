@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef int64_t esum_t;
+
 /* Delta BZ Energy of Dinucleotide */
 static const double dbzed[4][16] = {
     /* AS-AS */
@@ -28,24 +30,9 @@ static const int int_dbzed[4][16] = {
 };
 static double expdbzed[4][16]; /* exp(-dbzed/rt) */
 
-typedef int64_t esum_t;
-typedef struct {
-    esum_t esum;
-    char* antisyn;
-} Candidate;
-
-Candidate g_best0;
-Candidate g_best0_prev;
-Candidate g_best1;
-
 void antisyn_init(int dinucleotides)
 {
     static double rt = 0.59004; /* 0.00198*298 */
-
-    g_best0.antisyn = (char*)malloc(2 * dinucleotides + 1);
-    g_best0_prev.antisyn = (char*)malloc(2 * dinucleotides + 1);
-    g_best1.antisyn = (char*)malloc(2 * dinucleotides + 1);
-
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 16; j++) {
             expdbzed[i][j] = exp(-dbzed[i][j] / rt);
@@ -53,12 +40,7 @@ void antisyn_init(int dinucleotides)
     }
 }
 
-void antisyn_destroy(void)
-{
-    free(g_best0.antisyn);
-    free(g_best0_prev.antisyn);
-    free(g_best1.antisyn);
-}
+void antisyn_destroy(void) {}
 
 void assign_bzenergy_index(int nucleotides, const char* seq, int* bzindex)
 {
@@ -198,11 +180,14 @@ void find_best_antisyn(int dinucleotides, const int* bzindex, char* antisyn_out)
         return;
     }
 
-    g_best0.esum = int_dbzed[0][bzindex[0]];
-    g_best0.antisyn[0] = 0;
+    esum_t best0_esum = int_dbzed[0][bzindex[0]];
+    char best0_antisyn[dinucleotides];
+    char best0_prev_antisyn[dinucleotides];
+    best0_antisyn[0] = 0;
 
-    g_best1.esum = int_dbzed[3][bzindex[0]];
-    g_best1.antisyn[0] = 1;
+    esum_t best1_esum = int_dbzed[3][bzindex[0]];
+    char best1_antisyn[dinucleotides];
+    best1_antisyn[0] = 1;
 
     for (int din = 1; din < dinucleotides; ++din) {
         const esum_t dbzed00 = int_dbzed[0][bzindex[din]];
@@ -210,33 +195,33 @@ void find_best_antisyn(int dinucleotides, const int* bzindex, char* antisyn_out)
         const esum_t dbzed10 = int_dbzed[2][bzindex[din]];
         const esum_t dbzed11 = int_dbzed[3][bzindex[din]];
 
-        const esum_t prev_best0 = g_best0.esum;
-        const esum_t prev_best1 = g_best1.esum;
-        // g_best0 is dirty when processing g_best1
-        memcpy(g_best0_prev.antisyn, g_best0.antisyn, din);
+        const esum_t prev_best0 = best0_esum;
+        const esum_t prev_best1 = best1_esum;
+        // best0 is dirty when processing best1, copy the original value
+        memcpy(best0_prev_antisyn, best0_antisyn, din);
 
         esum_t esum00 = prev_best0 + dbzed00;
         esum_t esum10 = prev_best1 + dbzed10;
         // relatively expensive comparison to preserve original order
-        if ((esum00 < esum10) || ((esum00 == esum10) && (strncmp(g_best0.antisyn, g_best1.antisyn, din) <= 0))) {
-            g_best0.esum = esum00;
+        if ((esum00 < esum10) || ((esum00 == esum10) && (strncmp(best0_antisyn, best1_antisyn, din) <= 0))) {
+            best0_esum = esum00;
         } else {
-            g_best0.esum = esum10;
-            memcpy(g_best0.antisyn, g_best1.antisyn, din);
+            best0_esum = esum10;
+            memcpy(best0_antisyn, best1_antisyn, din);
         }
-        g_best0.antisyn[din] = 0;
+        best0_antisyn[din] = 0;
 
         esum_t esum01 = prev_best0 + dbzed01;
         esum_t esum11 = prev_best1 + dbzed11;
-        if ((esum11 < esum01) || ((esum11 == esum01) && (strncmp(g_best1.antisyn, g_best0.antisyn, din) < 0))) {
-            g_best1.esum = esum11;
+        if ((esum11 < esum01) || ((esum11 == esum01) && (strncmp(best1_antisyn, best0_antisyn, din) < 0))) {
+            best1_esum = esum11;
         } else {
-            g_best1.esum = esum01;
-            memcpy(g_best1.antisyn, g_best0_prev.antisyn, din);
+            best1_esum = esum01;
+            memcpy(best1_antisyn, best0_prev_antisyn, din);
         }
-        g_best1.antisyn[din] = 1;
+        best1_antisyn[din] = 1;
     }
 
-    Candidate* best = g_best0.esum <= g_best1.esum ? &g_best0 : &g_best1;
-    antisyn_string(best->antisyn, dinucleotides, antisyn_out);
+    char* best_antisyn = best0_esum <= best1_esum ? best0_antisyn : best1_antisyn;
+    antisyn_string(best_antisyn, dinucleotides, antisyn_out);
 }
