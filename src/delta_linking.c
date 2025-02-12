@@ -4,33 +4,29 @@
 #include <stdlib.h>
 
 static double *bztwist; // Read-only after init
-static double *exponent;
 static const double _k_rt = -0.2521201; /* -1100/4363 */
 static const double sigma = 16.94800353; /* 10/RT */
 static const double explimit = -600.0;
 
-void delta_linking_init(int dinucleotides)
+void delta_linking_init(int max_dinucleotides)
 {
     static double a = 0.357, b = 0.4; /* a = 2 * (1/10.5 + 1/12) */
     double ab;
 
-    bztwist = (double*)calloc(dinucleotides, sizeof(double));
+    bztwist = (double*)calloc(max_dinucleotides, sizeof(double));
     ab = b + b;
-    for (int i = 0; i < dinucleotides; i++) {
+    for (int i = 0; i < max_dinucleotides; i++) {
         ab += a;
         bztwist[i] = ab;
     }
-    exponent = (double*)calloc(dinucleotides, sizeof(double));
 }
 
 void delta_linking_destroy(void)
 {
-    free(exponent);
     free(bztwist);
 }
 
-static double delta_linking(double dl, double deltatwist, const double* logcoef, int terms)
-{
+static void delta_linking_exponent(double dl, int terms, const double* logcoef, double* expmini_out, double* exponent) {
     double expmini = 0.0;
     #pragma omp simd reduction(min:expmini)
     for (int i = 0; i < terms; i++) {
@@ -40,7 +36,15 @@ static double delta_linking(double dl, double deltatwist, const double* logcoef,
             expmini = z;
         }
     }
-    expmini = (expmini < explimit) ? explimit - expmini : 0.0;
+    *expmini_out = (expmini < explimit) ? explimit - expmini : 0.0;
+}
+
+static double delta_linking(double dl, double deltatwist, const double* logcoef, int terms)
+{
+    double expmini;
+    double exponent[terms];
+    delta_linking_exponent(dl, terms, logcoef, &expmini, exponent);
+
     double sump = 0.0;
     double sumq = 0.0;
     #pragma omp simd reduction(+:sumq,sump)
@@ -100,15 +104,10 @@ double delta_linking_slope(double dl, const double* logcoef, int terms)
 {
     double sump, sump1, sumq, sumq1, x, y, z;
 
-    double expmini = 0.0;
-    for (int i = 0; i < terms; i++) {
-        z = dl - bztwist[i];
-        exponent[i] = z = logcoef[i] + _k_rt * z * z;
-        if (z < expmini) {
-            expmini = z;
-        }
-    }
-    expmini = (expmini < explimit) ? explimit - expmini : 0.0;
+    double expmini;
+    double exponent[terms];
+    delta_linking_exponent(dl, terms, logcoef, &expmini, exponent);
+
     sump = sump1 = sumq = sumq1 = 0.0;
     x = 2.0 * _k_rt;
     for (int i = 0; i < terms; i++) {
