@@ -257,6 +257,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     char* bestantisyn = (char*)malloc(nucleotides + 1);
     char* antisyn = (char*)malloc(nucleotides + 1);
     double* bzenergy = (double*)malloc(todin * sizeof(double));
+    double* dl_logcoef = (double*)malloc(todin * sizeof(double));
     antisyn_init(todin);
 
     time(&begintime);
@@ -264,18 +265,23 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
         printf("seqlength %d/%d\r", i, seqlength);
         assign_bzenergy_index(nucleotides, sequence + i);
         bestdl = 50.0;
+        int bestdldin = todin;
         for (din = fromdin; din <= todin; din++) {
             find_best_antisyn(din, antisyn);
             antisyn_bzenergy(antisyn, din, bzenergy);
 
-            dl = find_delta_linking(din, a * (double)din, bzenergy);
+            delta_linking_logcoef(din, bzenergy, dl_logcoef);
+            dl = find_delta_linking(din, a * (double)din, dl_logcoef);
             if (dl < bestdl) {
                 bestdl = dl;
+                bestdldin = din;
                 strncpy(bestantisyn, antisyn, nucleotides + 1);
             }
         }
 #ifndef PROB_ONLY
-        slope = atan(delta_linking_slope(bestdl, todin)) * pideg;
+        antisyn_bzenergy(bestantisyn, bestdldin, bzenergy);
+        delta_linking_logcoef(bestdldin, bzenergy, dl_logcoef);
+        slope = atan(delta_linking_slope(bestdl, dl_logcoef, bestdldin)) * pideg;
 #endif
         probability = assign_probability(bestdl);
 #ifndef PROB_ONLY
@@ -287,6 +293,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     time(&endtime);
 
     free(bzenergy);
+    free(dl_logcoef);
     free(bestantisyn);
     free(antisyn);
     antisyn_destroy();

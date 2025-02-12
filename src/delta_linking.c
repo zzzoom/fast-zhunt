@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 static double *bztwist; // Read-only after init
-static double *logcoef, *exponent;
+static double *exponent;
 static const double _k_rt = -0.2521201; /* -1100/4363 */
 static const double sigma = 16.94800353; /* 10/RT */
 static const double explimit = -600.0;
@@ -20,18 +20,16 @@ void delta_linking_init(int dinucleotides)
         ab += a;
         bztwist[i] = ab;
     }
-    logcoef = (double*)calloc(dinucleotides, sizeof(double));
     exponent = (double*)calloc(dinucleotides, sizeof(double));
 }
 
 void delta_linking_destroy(void)
 {
     free(exponent);
-    free(logcoef);
     free(bztwist);
 }
 
-static double delta_linking(double dl, double deltatwist, int terms)
+static double delta_linking(double dl, double deltatwist, const double* logcoef, int terms)
 {
     double expmini = 0.0;
     #pragma omp simd reduction(min:expmini)
@@ -55,10 +53,10 @@ static double delta_linking(double dl, double deltatwist, int terms)
     return deltatwist - sump / sumq;
 }
 
-static double linear_search_dl(double x1, double x2, double tole, double deltatwist, int terms)
+static double linear_search_dl(double x1, double x2, double tole, double deltatwist, const double* logcoef, int terms)
 {
-    double f = delta_linking(x1, deltatwist, terms);
-    double fmid = delta_linking(x2, deltatwist, terms);
+    double f = delta_linking(x1, deltatwist, logcoef, terms);
+    double fmid = delta_linking(x2, deltatwist, logcoef, terms);
     if (f * fmid >= 0.0) {
         return x2;
     }
@@ -68,7 +66,7 @@ static double linear_search_dl(double x1, double x2, double tole, double deltatw
     do {
         dx *= 0.5;
         xmid = x + dx;
-        fmid = delta_linking(xmid, deltatwist, terms);
+        fmid = delta_linking(xmid, deltatwist, logcoef, terms);
         if (fmid <= 0.0) {
             x = xmid;
         }
@@ -76,7 +74,7 @@ static double linear_search_dl(double x1, double x2, double tole, double deltatw
     return x;
 }
 
-void dl_logcoef(int dinucleotides, const double* best_bzenergy, double* logcoef)
+void delta_linking_logcoef(int dinucleotides, const double* best_bzenergy, double* logcoef)
 {
     double bzenergy_scratch[dinucleotides];
 
@@ -93,28 +91,12 @@ void dl_logcoef(int dinucleotides, const double* best_bzenergy, double* logcoef)
     }
 }
 
-double find_delta_linking(int dinucleotides, double dtwist, const double* best_bzenergy)
+double find_delta_linking(int dinucleotides, double dtwist, const double* logcoef)
 {
-    double sum;
-    int i, j;
-
-    double bzenergy_scratch[dinucleotides];
-
-    for (i = 0; i < dinucleotides; i++) {
-        bzenergy_scratch[i] = 1.0;
-    }
-    for (i = 0; i < dinucleotides; i++) {
-        sum = 0.0;
-        for (j = 0; j < dinucleotides - i; j++) {
-            bzenergy_scratch[j] *= best_bzenergy[i + j];
-            sum += bzenergy_scratch[j];
-        }
-        logcoef[i] = log(sum);
-    }
-    return linear_search_dl(10.0, 50.0, 0.001, dtwist, dinucleotides);
+    return linear_search_dl(10.0, 50.0, 0.001, dtwist, logcoef, dinucleotides);
 }
 
-double delta_linking_slope(double dl, int terms)
+double delta_linking_slope(double dl, const double* logcoef, int terms)
 {
     double sump, sump1, sumq, sumq1, x, y, z;
 
