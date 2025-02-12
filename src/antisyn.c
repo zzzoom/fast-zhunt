@@ -4,8 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int* bzindex; /* dinucleotides */
-
 /* Delta BZ Energy of Dinucleotide */
 static const double dbzed[4][16] = {
     /* AS-AS */
@@ -48,8 +46,6 @@ void antisyn_init(int dinucleotides)
     g_best0_prev.antisyn = (char*)malloc(2 * dinucleotides + 1);
     g_best1.antisyn = (char*)malloc(2 * dinucleotides + 1);
 
-    bzindex = (int*)calloc(dinucleotides, sizeof(int));
-
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 16; j++) {
             expdbzed[i][j] = exp(-dbzed[i][j] / rt);
@@ -62,10 +58,9 @@ void antisyn_destroy(void)
     free(g_best0.antisyn);
     free(g_best0_prev.antisyn);
     free(g_best1.antisyn);
-    free(bzindex);
 }
 
-void assign_bzenergy_index(int nucleotides, char seq[])
+void assign_bzenergy_index(int nucleotides, const char* seq, int* bzindex)
 {
     int i = 0;
     int j = 0;
@@ -138,7 +133,7 @@ void assign_bzenergy_index(int nucleotides, char seq[])
     } while (i < nucleotides);
 }
 
-static void antisyn_01_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy)
+static void antisyn_01_bzenergy(int dinucleotides, const char* antisyn, const int* bzindex, double* bzenergy)
 {
     if (dinucleotides == 0) {
         return;
@@ -159,7 +154,7 @@ static void antisyn_01_bzenergy(const char* antisyn, int dinucleotides, double* 
     }
 }
 
-void antisyn_bzenergy(const char* antisyn_string, int dinucleotides, double* bzenergy)
+void antisyn_bzenergy(int dinucleotides, const char* antisyn_string, const int* bzindex, double* bzenergy)
 {
     if (dinucleotides == 0) {
         return;
@@ -197,7 +192,7 @@ static void antisyn_string(const char* antisyn, int dinucleotides, char* dest)
     dest[2 * dinucleotides] = '\0';
 }
 
-void find_best_antisyn(int dinucleotides, char* antisyn_out)
+void find_best_antisyn(int dinucleotides, const int* bzindex, char* antisyn_out)
 {
     if (dinucleotides < 1) {
         return;
