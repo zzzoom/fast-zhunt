@@ -4,4 +4,5 @@ void antisyn_init(int dinucleotides);
 void antisyn_destroy(void);
 
 void assign_bzenergy_index(int nucleotides, char seq[]);
-void anti_syn_energy(int dinucleotides, char* antisyn_out, double* bzenergy_out);
+void find_best_antisyn(int dinucleotides, char* antisyn_out);
+void antisyn_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy);

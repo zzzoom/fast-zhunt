@@ -138,7 +138,7 @@ void assign_bzenergy_index(int nucleotides, char seq[])
     } while (i < nucleotides);
 }
 
-static void antisyn_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy)
+static void antisyn_01_bzenergy(const char* antisyn, int dinucleotides, double* bzenergy)
 {
     if (dinucleotides == 0) {
         return;
@@ -153,6 +153,27 @@ static void antisyn_bzenergy(const char* antisyn, int dinucleotides, double* bze
             i = (antisyn[din - 1] == 1) ? 3 : 1;
         } else {
             fprintf(stderr, "antisyn_bzenergy: wrong value %d in antisyn\n", antisyn[din]);
+            exit(EXIT_FAILURE);
+        }
+        bzenergy[din] = expdbzed[i][bzindex[din]];
+    }
+}
+
+void antisyn_bzenergy(const char* antisyn_string, int dinucleotides, double* bzenergy)
+{
+    if (dinucleotides == 0) {
+        return;
+    }
+
+    int i = antisyn_string[0] == 'A' ? 0 : 3;
+    bzenergy[0] = expdbzed[i][bzindex[0]];
+    for (int din = 1; din < dinucleotides; ++din) {
+        if (antisyn_string[2 * din] == 'A') {
+            i = (antisyn_string[2 * din - 2] == 'A') ? 0 : 2;
+        } else if (antisyn_string[2 * din] == 'S') {
+            i = (antisyn_string[2 * din - 2] == 'S') ? 3 : 1;
+        } else {
+            fprintf(stderr, "antisyn_bzenergy: wrong value %c in antisyn\n", antisyn_string[2 * din]);
             exit(EXIT_FAILURE);
         }
         bzenergy[din] = expdbzed[i][bzindex[din]];
@@ -176,7 +197,7 @@ static void antisyn_string(const char* antisyn, int dinucleotides, char* dest)
     dest[2 * dinucleotides] = '\0';
 }
 
-void anti_syn_energy(int dinucleotides, char* antisyn_out, double* bzenergy_out)
+void find_best_antisyn(int dinucleotides, char* antisyn_out)
 {
     if (dinucleotides < 1) {
         return;
@@ -223,5 +244,4 @@ void anti_syn_energy(int dinucleotides, char* antisyn_out, double* bzenergy_out)
 
     Candidate* best = g_best0.esum <= g_best1.esum ? &g_best0 : &g_best1;
     antisyn_string(best->antisyn, dinucleotides, antisyn_out);
-    antisyn_bzenergy(best->antisyn, dinucleotides, bzenergy_out);
 }
