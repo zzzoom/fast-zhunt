@@ -58,17 +58,14 @@ static double assign_probability(double dl);
 static void analyze_zscore(char* filename);
 static void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename);
 
-static FILE* open_file(int mode, char* filename, char* typestr);
+static FILE* open_file(int mode, const char* filename, const char* typestr);
 static unsigned input_sequence(FILE* file, int nucleotides, int showfile);
 
-static FILE* open_file(int mode, char* filename, char* typestr)
+static FILE* open_file(int mode, const char* filename, const char* typestr)
 {
-    static char* rwstr[] = { "w", "r" };
-    char* fullfile;
+    static const char* rwstr[] = { "w", "r" };
 
-    FILE* file;
-    file = NULL;
-    fullfile = (char*)malloc(sizeof(char) * (strlen(filename) + strlen(typestr) + 2));
+    char* fullfile = (char*)malloc(sizeof(char) * (strlen(filename) + strlen(typestr) + 2));
     strcpy(fullfile, filename);
     if (strlen(typestr) != 0) {
         strcat(fullfile, ".");
@@ -76,7 +73,7 @@ static FILE* open_file(int mode, char* filename, char* typestr)
     }
     printf("opening %s\n", fullfile);
 
-    file = fopen(fullfile, rwstr[mode]);
+    FILE* file = fopen(fullfile, rwstr[mode]);
     free(fullfile);
     return file;
 }
@@ -190,30 +187,25 @@ int main(int argc, char* argv[])
 {
     static double a = 0.357;
 
-    int i, j, nucleotides, dinucleotides;
-    int min, max;
-
     if (argc < 5) {
         printf("usage: zhunt windowsize minsize maxsize datafile\n");
         exit(1);
     }
     tempstr = (char*)malloc(128);
-    dinucleotides = atoi((char*)argv[1]);
-    min = atoi((char*)argv[2]);
-    max = atoi((char*)argv[3]);
+
+    int dinucleotides = atoi((char*)argv[1]);
+
+    int min = atoi((char*)argv[2]);
+    int max = atoi((char*)argv[3]);
 
     printf("dinucleotides %d\n", dinucleotides);
     printf("min/max %d %d\n", min, max);
     printf("operating on %s\n", (char*)argv[4]);
 
-    nucleotides = 2 * dinucleotides;
-
     delta_linking_init(dinucleotides);
 
     calculate_zscore(a, dinucleotides, min, max, (char*)argv[4]);
-#ifndef PROB_ONLY
     analyze_zscore((char*)argv[4]);
-#endif
 
     free(tempstr);
     delta_linking_destroy();
@@ -222,26 +214,20 @@ int main(int argc, char* argv[])
 
 static void calculate_zscore(double a, int maxdinucleotides, int min, int max, char* filename)
 {
-    static double pideg = 57.29577951; /* 180/pi */
-    unsigned seqlength, i;
-    int fromdin, todin, din, nucleotides;
-    long begintime, endtime;
-    double dl, slope, probability, bestdl;
+    static const double pideg = 57.29577951; /* 180/pi */
 
-    fromdin = min;
-    todin = max;
     printf("calculating zscore\n");
 
-    FILE* file = open_file(1, filename, "");
-    if (file == NULL) {
+    FILE* infile = open_file(1, filename, "");
+    if (infile == NULL) {
         printf("couldn't open %s!\n", filename);
         return;
     }
-    seqlength = input_sequence(file, 2 * maxdinucleotides, 0);
-    fclose(file);
+    unsigned int seqlength = input_sequence(infile, 2 * maxdinucleotides, 0);
+    fclose(infile);
 
-    file = open_file(0, filename, "Z-SCORE");
-    if (file == NULL) {
+    FILE* zfile = open_file(0, filename, "Z-SCORE");
+    if (zfile == NULL) {
 #ifndef USE_MMAP
         free(sequence);
 #else
@@ -251,17 +237,19 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
         return;
     }
 
+    int todin = max;
     if (todin > maxdinucleotides) {
         todin = maxdinucleotides;
     }
+
+    int fromdin = min;
     if (fromdin > todin) {
         fromdin = todin;
     }
-    nucleotides = 2 * todin;
 
-#ifndef PROB_ONLY
-    fprintf(file, "%s %u %d %d\n", filename, seqlength, fromdin, todin);
-#endif
+    int nucleotides = 2 * todin;
+
+    fprintf(zfile, "%s %u %d %d\n", filename, seqlength, fromdin, todin);
 
     a /= 2.0;
     char* bestantisyn = (char*)malloc(nucleotides + 1);
@@ -273,18 +261,19 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
 
     antisyn_init();
 
+    long begintime, endtime;
     time(&begintime);
-    for (i = 0; i < seqlength; i++) {
+    for (unsigned int i = 0; i < seqlength; i++) {
         printf("seqlength %d/%d\r", i, seqlength);
         assign_bzenergy_index(nucleotides, sequence + i, bzindex);
-        bestdl = 50.0;
+        double bestdl = 50.0;
         int bestdldin = todin;
-        for (din = fromdin; din <= todin; din++) {
+        for (int din = fromdin; din <= todin; din++) {
             find_best_antisyn(din, bzindex, antisyn);
             antisyn_bzenergy(din, antisyn, bzindex, bzenergy);
 
             delta_linking_logcoef(din, bzenergy, dl_logcoef);
-            dl = find_delta_linking(din, a * (double)din, dl_logcoef);
+            double dl = find_delta_linking(din, a * (double)din, dl_logcoef);
             if (dl < bestdl) {
                 bestdl = dl;
                 bestdldin = din;
@@ -302,7 +291,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     time(&endtime);
 
     for (unsigned int i = 0; i < seqlength; ++i) {
-        fprintf(file, " %7.3lf %7.3lf %le %s\n", results[i].dl, results[i].slope, results[i].probability, results[i].antisyn);
+        fprintf(zfile, " %7.3lf %7.3lf %le %s\n", results[i].dl, results[i].slope, results[i].probability, results[i].antisyn);
         free(results[i].antisyn);
     }
     free(results);
@@ -313,7 +302,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     free(bestantisyn);
     free(antisyn);
     antisyn_destroy();
-    fclose(file);
+    fclose(zfile);
     printf("\n run time=%ld sec\n", endtime - begintime);
 #ifndef USE_MMAP
     free(sequence);
