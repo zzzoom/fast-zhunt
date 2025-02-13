@@ -1,6 +1,6 @@
 #pragma once
 
-void antisyn_init(int dinucleotides);
+void antisyn_init(void);
 void antisyn_destroy(void);
 
 void assign_bzenergy_index(int nucleotides, const char* seq, int* bzindex);

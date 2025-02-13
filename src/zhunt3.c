@@ -259,7 +259,7 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     double* bzenergy = (double*)malloc(todin * sizeof(double));
     double* dl_logcoef = (double*)malloc(todin * sizeof(double));
     int* bzindex = (int*)malloc(todin * sizeof(int));
-    antisyn_init(todin);
+    antisyn_init();
 
     time(&begintime);
     for (i = 0; i < seqlength; i++) {

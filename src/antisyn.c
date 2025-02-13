@@ -30,7 +30,7 @@ static const int int_dbzed[4][16] = {
 };
 static double expdbzed[4][16]; /* exp(-dbzed/rt) */
 
-void antisyn_init(int dinucleotides)
+void antisyn_init()
 {
     static double rt = 0.59004; /* 0.00198*298 */
     for (int i = 0; i < 4; i++) {
