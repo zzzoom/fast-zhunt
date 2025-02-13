@@ -130,12 +130,13 @@ static unsigned input_sequence(FILE* file, int nucleotides, int showfile)
             }
         }
     }
-    for (j = 0; j < nucleotides; j++) /* assume circular nucleotides */
+
+    for (int k = 0; k < nucleotides; k++) /* assume circular nucleotides */
     {
 #ifndef USE_MMAP
-        sequence[i++] = sequence[j];
+        sequence[i++] = sequence[k];
 #else
-        fprintf(OUTPUT, "%c", sequence[j]);
+        fprintf(OUTPUT, "%c", sequence[k]);
 #endif
     }
 #ifdef USE_MMAP
