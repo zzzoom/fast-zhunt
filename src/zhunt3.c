@@ -252,20 +252,23 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     fprintf(zfile, "%s %u %d %d\n", filename, seqlength, fromdin, todin);
 
     a /= 2.0;
-    char* bestantisyn = (char*)malloc(nucleotides + 1);
-    char* antisyn = (char*)malloc(nucleotides + 1);
-    double* bzenergy = (double*)malloc(todin * sizeof(double));
-    double* dl_logcoef = (double*)malloc(todin * sizeof(double));
-    int* bzindex = (int*)malloc(todin * sizeof(int));
-    Result* results = (Result*)malloc(seqlength * sizeof(Result));
+    Result* results = (Result*)calloc(seqlength, sizeof(Result));
 
     antisyn_init();
 
     long begintime, endtime;
     time(&begintime);
+    #pragma omp parallel for default(shared)
     for (unsigned int i = 0; i < seqlength; i++) {
-        printf("seqlength %d/%d\r", i, seqlength);
+
+        char bestantisyn[nucleotides + 1];
+        char antisyn[nucleotides + 1];
+        double bzenergy[todin];
+        double dl_logcoef[todin];
+
+        int bzindex[todin];
         assign_bzenergy_index(nucleotides, sequence + i, bzindex);
+
         double bestdl = 50.0;
         int bestdldin = todin;
         for (int din = fromdin; din <= todin; din++) {
@@ -296,11 +299,6 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     }
     free(results);
 
-    free(bzindex);
-    free(bzenergy);
-    free(dl_logcoef);
-    free(bestantisyn);
-    free(antisyn);
     antisyn_destroy();
     fclose(zfile);
     printf("\n run time=%ld sec\n", endtime - begintime);

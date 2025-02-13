@@ -1,4 +1,4 @@
-CFLAGS=-O2 -Wall -Wextra -g
+CFLAGS=-O3 -fopenmp -Wall -Wextra -g
 LDFLAGS=-lm
 
 TARGET=zhunt
