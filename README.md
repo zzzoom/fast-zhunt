@@ -1,6 +1,6 @@
 # Fast Z-Hunt
 
-A faster (linear time instead of exponential) implementation of [Z-Hunt](https://github.com/Ho-Lab-Colostate/zhunt/), an algorithm for predicting the propensity of DNA to flip from the B-form to the Z-form.
+A faster (linear time instead of exponential) and parallel (using OpenMP) implementation of [Z-Hunt](https://github.com/Ho-Lab-Colostate/zhunt/), an algorithm for predicting the propensity of DNA to flip from the B-form to the Z-form.
 
 ## Compiling from Source
 
@@ -14,7 +14,7 @@ make
 ## Authors
 
 * **Shing Ho** - *Initial work* - [original publication](./)
-* **Carlos Bederián** - Solution in linear time
+* **Carlos Bederián** - Solution in linear time, parallelization
 
 ## License
 
