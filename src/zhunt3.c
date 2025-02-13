@@ -25,6 +25,8 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 #include "antisyn.h"
 #include "delta_linking.h"
 
+#define _POSIX_C_SOURCE 200809L
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +40,13 @@ With 0.22 kcal/mol/dinuc for mCG (Zacharias et al, Biochemistry, 1988, 2970)
 #include <sys/stat.h>
 #include <sys/types.h>
 #endif
+
+typedef struct {
+    double dl;
+    double slope;
+    double probability;
+    char* antisyn;
+} Result;
 
 char *tempstr, *sequence;
 #ifdef USE_MMAP
@@ -260,6 +269,8 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
     double* bzenergy = (double*)malloc(todin * sizeof(double));
     double* dl_logcoef = (double*)malloc(todin * sizeof(double));
     int* bzindex = (int*)malloc(todin * sizeof(int));
+    Result* results = (Result*)malloc(seqlength * sizeof(Result));
+
     antisyn_init();
 
     time(&begintime);
@@ -280,19 +291,21 @@ static void calculate_zscore(double a, int maxdinucleotides, int min, int max, c
                 strncpy(bestantisyn, antisyn, nucleotides + 1);
             }
         }
-#ifndef PROB_ONLY
         antisyn_bzenergy(bestdldin, bestantisyn, bzindex, bzenergy);
         delta_linking_logcoef(bestdldin, bzenergy, dl_logcoef);
-        slope = atan(delta_linking_slope(bestdl, dl_logcoef, bestdldin)) * pideg;
-#endif
-        probability = assign_probability(bestdl);
-#ifndef PROB_ONLY
-        fprintf(file, " %7.3lf %7.3lf %le %s\n", bestdl, slope, probability, bestantisyn);
-#else
-        fprintf(file, " %7.3lf %le\n", bestdl, probability);
-#endif
+
+        results[i].dl = bestdl;
+        results[i].slope = atan(delta_linking_slope(bestdl, dl_logcoef, bestdldin)) * pideg;
+        results[i].probability = assign_probability(bestdl);
+        results[i].antisyn = strdup(bestantisyn);
     }
     time(&endtime);
+
+    for (unsigned int i = 0; i < seqlength; ++i) {
+        fprintf(file, " %7.3lf %7.3lf %le %s\n", results[i].dl, results[i].slope, results[i].probability, results[i].antisyn);
+        free(results[i].antisyn);
+    }
+    free(results);
 
     free(bzindex);
     free(bzenergy);
